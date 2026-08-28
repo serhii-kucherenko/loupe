@@ -221,18 +221,25 @@ public final class OverlayHost {
 #if canImport(UIKit)
 import UIKit
 
-/// A window above the app's own, which lets clicks through wherever the overlay is
-/// not drawing anything.
+/// A window above the app's own, which lets touches through wherever the overlay
+/// has nothing for them.
 ///
-/// UIKit makes this easy in a way AppKit does not: the hosting controller's root
-/// view is returned by `hitTest` for empty space, so returning nil for exactly that
-/// case gives a clean pass-through.
+/// "Nothing for them" cannot be read off `hitTest`. A `UIHostingController` is a
+/// single `UIView` whatever SwiftUI draws inside it, so comparing the hit against
+/// the root view answers the same for the pill, for the tray's Send button and for
+/// blank space - which made every control Loupe draws in a pass-through mode
+/// untappable. The controls report their own frames instead; see
+/// `InteractiveRegions.swift`.
 final class PassthroughWindow: UIWindow {
     var isPassthrough: () -> Bool = { true }
+    /// Window-coordinate frames of the overlay's own controls.
+    var interactiveRegions: () -> [CGRect] = { [] }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
-        if isPassthrough(), hit === rootViewController?.view { return nil }
+        // Picking and commenting take everything, as before.
+        guard isPassthrough() else { return hit }
+        guard interactiveRegions().contains(where: { $0.contains(point) }) else { return nil }
         return hit
     }
 }
@@ -249,17 +256,45 @@ enum WindowFinder {
     /// test bundle has no app host and therefore no `UIWindowScene` at all - a
     /// version of this that only accepted a scene could only ever be skipped.
     static func topmost(among windows: [UIWindow], excluding overlay: UIWindow?) -> UIWindow? {
-        windows
-            .filter { $0 !== overlay && !$0.isHidden && $0.alpha > 0 }
-            .max { a, b in
-                if a.windowLevel != b.windowLevel { return a.windowLevel < b.windowLevel }
-                // Same level: the key window is the one in front.
-                return (a.isKeyWindow ? 1 : 0) < (b.isKeyWindow ? 1 : 0)
-            }
+        candidates(among: windows, excluding: overlay).max(by: inFront)
+    }
+
+    /// The window that actually has something under `point`.
+    ///
+    /// "Topmost" alone is not enough. UIKit keeps utility windows in the scene -
+    /// `UITextEffectsWindow` sits above the app at level 1 with nothing in it, and
+    /// on a scene where any text interaction has happened it wins on level every
+    /// time. The pick then hit-tests an empty pane: the person points at a menu
+    /// item and annotates a blank window instead. A window that hit-tests to
+    /// nothing at the point is not what anyone was pointing at, so skip it.
+    static func topmost(among windows: [UIWindow],
+                        excluding overlay: UIWindow?,
+                        at point: CGPoint) -> UIWindow? {
+        let live = candidates(among: windows, excluding: overlay)
+            .filter { $0.hitTest(point, with: nil) != nil }
+        // Fall back to the plain rule rather than returning nothing: a pick that
+        // lands somewhere imperfect still beats a tap that does nothing at all.
+        return live.max(by: inFront) ?? candidates(among: windows, excluding: overlay).max(by: inFront)
+    }
+
+    private static func candidates(among windows: [UIWindow], excluding overlay: UIWindow?) -> [UIWindow] {
+        windows.filter { $0 !== overlay && !$0.isHidden && $0.alpha > 0 }
+    }
+
+    private static func inFront(_ a: UIWindow, _ b: UIWindow) -> Bool {
+        if a.windowLevel != b.windowLevel { return a.windowLevel < b.windowLevel }
+        // Same level: the key window is the one in front.
+        return (a.isKeyWindow ? 1 : 0) < (b.isKeyWindow ? 1 : 0)
     }
 
     static func topmost(in scene: UIWindowScene, excluding overlay: UIWindow?) -> UIWindow? {
         topmost(among: scene.windows, excluding: overlay)
+    }
+
+    static func topmost(in scene: UIWindowScene,
+                        excluding overlay: UIWindow?,
+                        at point: CGPoint) -> UIWindow? {
+        topmost(among: scene.windows, excluding: overlay, at: point)
     }
 }
 
@@ -306,7 +341,7 @@ public final class OverlayHost {
         // stays alive.
         let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak scene] point in
             guard let model, let scene,
-                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow),
+                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow, at: point),
                   let shot = ElementPicker.capture(at: point, in: target) else { return }
             model.pick(shot.ref,
                        screenshotPNG: shot.screenshotPNG,
@@ -326,6 +361,7 @@ public final class OverlayHost {
         window.isPassthrough = { [weak model] in
             !(model?.mode.swallowsInput ?? false)
         }
+        window.interactiveRegions = { [weak model] in model?.interactiveRegions ?? [] }
     }
 }
 
@@ -407,7 +443,11 @@ private struct OverlayRootWithPill: View {
                 .padding(.bottom, safeArea.bottom)
                 .padding(.trailing, safeArea.trailing)
                 .accessibilityLabel("Start annotating")
+                .loupeInteractive()
             }
+        }
+        .onPreferenceChange(InteractiveRegionsKey.self) { regions in
+            MainActor.assumeIsolated { model.interactiveRegions = regions }
         }
     }
 }
