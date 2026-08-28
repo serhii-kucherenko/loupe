@@ -173,8 +173,38 @@ public enum ElementPicker {
     @MainActor
     public static func regionRef(at point: CGPoint, in window: PlatformWindow) -> ElementRef? {
         guard let box = regionBox(at: point, in: window) else { return nil }
-        return ElementRef(bounds: Rect(x: box.origin.x, y: box.origin.y,
-                                       width: box.width, height: box.height))
+        return regionRef(box)
+    }
+
+    private static func regionRef(_ box: CGRect) -> ElementRef {
+        ElementRef(kind: .region,
+                   bounds: Rect(x: box.origin.x, y: box.origin.y,
+                                width: box.width, height: box.height))
+    }
+
+    /// The smallest drag worth treating as a region rather than a slipped tap.
+    public static let minimumRegionSize: CGFloat = 12
+
+    /// Everything a dragged rectangle produces.
+    ///
+    /// The gesture people actually asked for: point at nothing in particular and say
+    /// "this bit". Two controls misaligned with each other, the padding around a
+    /// group, the gap between two rows - none of those is a view, and the walk can
+    /// only ever answer with whichever one happens to be underneath.
+    ///
+    /// - Parameter rect: top-left origin, in window points, like every other
+    ///   rectangle the picker deals in. Clipped to the window.
+    @MainActor
+    public static func capture(rect: CGRect, in window: PlatformWindow)
+        -> (ref: ElementRef, screenshotPNG: Data?, contextScreenshotPNG: Data?)? {
+        let bounds = windowBounds(window)
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+
+        let box = rect.standardized
+            .intersection(CGRect(origin: .zero, size: bounds.size))
+        guard box.width >= minimumRegionSize, box.height >= minimumRegionSize else { return nil }
+
+        return (regionRef(box), regionPNG(box, in: window), contextPNG(ofRegion: box, in: window))
     }
 
     /// The box a region pick covers: centred on the point, clipped to the window.

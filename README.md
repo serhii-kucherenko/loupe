@@ -7,6 +7,10 @@ You enter annotate mode, pick an element, leave a comment, pick another, leave a
 Each pick is captured automatically: a picture of the exact element, the API calls that
 screen just made, the errors, the build it came from. One **Send** ships the batch.
 
+Point at one element, or **drag a rectangle** around whatever you actually mean. A
+gap, two things that disagree with each other, the padding round a group: plenty of
+real feedback is not about a single element, and no view corresponds to it.
+
 You never take a screenshot. You never write repro steps. You never fill in a ticket.
 
 **macOS, iPad, iPhone, the browser, and Electron.** Two SDKs, one bundle format.
@@ -151,6 +155,13 @@ language from that page alone.
 |---|---|
 | ![Hovering](docs/screenshots/01-hover-light.png) | ![The tray](docs/screenshots/03-tray-dark.png) |
 | Point at something. The highlight climbs to the element you *meant*. | Several screens, one tray. Every note carries the endpoint behind it. |
+
+Drag to say "this bit", on any platform. The rectangle is dashed while you draw it
+and solid once it is yours:
+
+| | |
+|---|---|
+| ![Dragging on the web](docs/screenshots/10-web-dragging.png) | ![A region on iPad](docs/screenshots/09-ipad-drag-region.png) |
 
 On an iPad the tray is a side panel; on an iPhone it becomes a bottom sheet:
 

@@ -2,14 +2,43 @@ import type { Annotation, AnnotationTag, ElementRef, Rect } from "./types.js";
 import { uuid } from "./types.js";
 import type { AnnotationSession } from "./session.js";
 import type { QueuedTransport } from "./transport.js";
-import { elementRef, pick as pickElement } from "./picker.js";
+import {
+  MINIMUM_REGION_SIZE, elementRef, pick as pickElement, regionRef,
+} from "./picker.js";
+
+/**
+ * Where a pick is on screen: the element's live rectangle, or the region's own.
+ *
+ * Live for an element, because the page can scroll between picking and drawing the
+ * popover. A region has no element, and its bounds are already viewport coordinates.
+ */
+function boxOf(pick: PendingPick): DOMRect {
+  if (pick.element) return pick.element.getBoundingClientRect();
+  const { x, y, width, height } = pick.ref.bounds;
+  return {
+    x, y, width, height,
+    left: x, top: y, right: x + width, bottom: y + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+/** The rectangle between two points, however it was dragged. */
+function between(a: { x: number; y: number }, b: { x: number; y: number }): Rect {
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    width: Math.abs(a.x - b.x),
+    height: Math.abs(a.y - b.y),
+  };
+}
 import type { LogRecorder, NetworkRecorder } from "./recorder.js";
 import { screenshotPNG } from "./capture.js";
 import { overlayCSS } from "./overlay.css.js";
 import { tagColour } from "./tokens.js";
 
 export interface PendingPick {
-  element: Element;
+  /** Absent for a region: nothing on the page corresponds to it. */
+  element?: Element;
   ref: ElementRef;
   screenshotPNG?: string;
   index: number;
@@ -127,6 +156,23 @@ export class Overlay {
     this.setMode({ kind: "commenting", pick });
   }
 
+  /**
+   * A dragged rectangle. The gesture people asked for, not a fallback: plenty of
+   * real feedback is about something no element corresponds to.
+   */
+  pickRegion(rect: Rect): void {
+    if (this.mode.kind !== "picking") return;
+    const ref = regionRef(rect, {
+      width: this.view.innerWidth,
+      height: this.view.innerHeight,
+    });
+    if (!ref) return;
+    this.setMode({
+      kind: "commenting",
+      pick: { ref, index: this.session.count + 1 },
+    });
+  }
+
   /** Backing out of a comment returns you to picking, not out of annotate mode. */
   cancelComment(): void {
     if (this.mode.kind !== "commenting") return;
@@ -230,12 +276,16 @@ export class Overlay {
    * popover's own controls need them, and while browsing the whole point is that
    * the page behaves normally.
    */
+  /** The rectangle being dragged out right now, in viewport coordinates. */
+  private dragRect?: Rect;
+
   private updatePageListeners(): void {
     this.pageListeners.forEach((off) => off());
     this.pageListeners = [];
     if (this.mode.kind !== "picking") return;
 
     const onMove = (event: MouseEvent) => {
+      if (this.dragRect) return;
       const element = pickElement(event.clientX, event.clientY, this.doc,
                                   (hit) => this.isOurs(hit));
       if (!element) return;
@@ -244,17 +294,58 @@ export class Overlay {
         this.render();
       }
     };
+    // A drag draws a region, a click picks an element. Which one it was is not
+    // known until the mouse comes back up, so the click handler has to be told.
+    let origin: { x: number; y: number } | undefined;
+    let dragged = false;
+
+    const onDown = (event: MouseEvent) => {
+      if (this.isOurs(event.target as Node)) return;
+      origin = { x: event.clientX, y: event.clientY };
+      dragged = false;
+    };
+
+    const onDragMove = (event: MouseEvent) => {
+      if (!origin) return;
+      const rect = between(origin, { x: event.clientX, y: event.clientY });
+      if (!dragged && rect.width < MINIMUM_REGION_SIZE && rect.height < MINIMUM_REGION_SIZE) {
+        return;
+      }
+      dragged = true;
+      this.dragRect = rect;
+      this.render();
+    };
+
+    const onUp = (event: MouseEvent) => {
+      const start = origin;
+      origin = undefined;
+      if (!start || !dragged) return;
+      this.dragRect = undefined;
+      this.pickRegion(between(start, { x: event.clientX, y: event.clientY }));
+    };
+
     const onClick = (event: MouseEvent) => {
       if (this.isOurs(event.target as Node)) return;
       event.preventDefault();
       event.stopPropagation();
+      // The click that ends a drag is not a click on anything.
+      if (dragged) {
+        dragged = false;
+        return;
+      }
       void this.pickAt(event.clientX, event.clientY);
     };
 
     this.doc.addEventListener("mousemove", onMove, true);
+    this.doc.addEventListener("mousedown", onDown, true);
+    this.doc.addEventListener("mousemove", onDragMove, true);
+    this.doc.addEventListener("mouseup", onUp, true);
     this.doc.addEventListener("click", onClick, true);
     this.pageListeners.push(
       () => this.doc.removeEventListener("mousemove", onMove, true),
+      () => this.doc.removeEventListener("mousedown", onDown, true),
+      () => this.doc.removeEventListener("mousemove", onDragMove, true),
+      () => this.doc.removeEventListener("mouseup", onUp, true),
       () => this.doc.removeEventListener("click", onClick, true),
     );
   }
@@ -288,13 +379,42 @@ export class Overlay {
       this.root.append(this.element("div", { class: "scrim" }));
     }
 
-    const highlighted = this.mode.kind === "picking" ? this.mode.hover
+    // The dragged rectangle wins while it is being drawn. Showing the hover
+    // highlight underneath it as well says two different things about what is
+    // about to be captured.
+    if (this.dragRect) {
+      const r = this.dragRect;
+      this.root.append(this.element("div", {
+        class: "drag-region",
+        style: `left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px`,
+        "aria-hidden": "true",
+      }));
+    }
+
+    const highlighted = this.dragRect ? undefined
+      : this.mode.kind === "picking" ? this.mode.hover
       : this.mode.kind === "commenting" ? this.mode.pick.element
       : undefined;
     if (highlighted) {
       const index = this.mode.kind === "commenting"
         ? this.mode.pick.index : this.session.count + 1;
       this.root.append(...this.highlight(highlighted, index));
+    }
+
+    if (this.mode.kind === "commenting" && !this.mode.pick.element) {
+      // A committed region has no element to outline, so it draws its own.
+      const r = this.mode.pick.ref.bounds;
+      this.root.append(
+        this.element("div", {
+          class: "highlight",
+          style: `left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px`,
+          "aria-hidden": "true",
+        }),
+        this.element("div", {
+          class: "badge",
+          style: `left:${r.x}px;top:${r.y}px`,
+        }, String(this.mode.pick.index)),
+      );
     }
 
     if (this.mode.kind === "commenting") this.root.append(this.popover(this.mode.pick));
@@ -308,6 +428,7 @@ export class Overlay {
 
   private highlight(element: Element, index: number): Element[] {
     const box = element.getBoundingClientRect();
+
     const outline = this.element("div", {
       class: "highlight",
       style: `left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px`,
@@ -321,7 +442,7 @@ export class Overlay {
   }
 
   private popover(pick: PendingPick): Element {
-    const box = pick.element.getBoundingClientRect();
+    const box = boxOf(pick);
     const width = 320;
     const height = 260;
     const gap = 12;
@@ -346,9 +467,15 @@ export class Overlay {
     const head = this.element("div", { class: "head" });
     head.append(this.element("div", { class: "badge" }, String(pick.index)));
     const names = this.element("div");
+    // A region is not an element and must not be labelled as one: calling a
+    // rectangle somebody drew "Element" is the panel disagreeing with what they
+    // just did.
+    const isRegion = pick.ref.kind === "region";
     names.append(this.element("div", { class: "name" },
-      pick.ref.label ?? pick.ref.accessibilityID ?? "Element"));
-    const detail = pick.ref.accessibilityID ?? pick.ref.selector;
+      isRegion ? "Region" : pick.ref.label ?? pick.ref.accessibilityID ?? "Element"));
+    const detail = isRegion
+      ? `${Math.round(pick.ref.bounds.width)}\u00d7${Math.round(pick.ref.bounds.height)}`
+      : pick.ref.accessibilityID ?? pick.ref.selector;
     if (detail) names.append(this.element("div", { class: "detail" }, detail));
     head.append(names);
 

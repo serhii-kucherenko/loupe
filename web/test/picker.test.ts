@@ -4,7 +4,7 @@ import { JSDOM } from "jsdom";
 
 import {
   isMeaningful, meaningfulAncestor, namedBy, elementRef, cssSelector, labelOf,
-  isBackdrop,
+  isBackdrop, regionRef,
 } from "../src/picker.js";
 
 /**
@@ -156,3 +156,44 @@ test("an ordinary element is never a backdrop", () => {
   const { document } = dom(`<div class="card" data-rect="0,0,200,100"></div>`);
   assert.equal(isBackdrop(q(document, ".card"), 1000 * 800), false);
 });
+
+// Drag-select, the same gesture the Swift SDK grew. A region is not a failed pick:
+// two controls misaligned with each other, the padding around a group and the gap
+// between two rows are all things no element corresponds to.
+test("a dragged rectangle is a region, not an element", () => {
+  const ref = regionRef({ x: 40, y: 60, width: 200, height: 120 },
+                        { width: 1000, height: 800 });
+
+  assert.equal(ref?.kind, "region");
+  assert.equal(ref?.className, undefined, "a region is not an element and does not pretend to be");
+  assert.deepEqual(ref?.bounds, { x: 40, y: 60, width: 200, height: 120 });
+});
+
+test("dragging backwards is the same rectangle", () => {
+  const forward = regionRef({ x: 40, y: 60, width: 200, height: 120 },
+                            { width: 1000, height: 800 });
+  const backward = regionRef({ x: 240, y: 180, width: -200, height: -120 },
+                             { width: 1000, height: 800 });
+
+  assert.deepEqual(forward?.bounds, backward?.bounds);
+});
+
+// Otherwise a click that slipped two pixels becomes a rectangle nobody meant.
+test("a tiny drag is not a region", () => {
+  const tiny = regionRef({ x: 40, y: 60, width: 4, height: 4 },
+                         { width: 1000, height: 800 });
+  assert.equal(tiny, null);
+});
+
+test("a rectangle dragged off the edge is clipped to the viewport", () => {
+  const ref = regionRef({ x: -30, y: -20, width: 200, height: 150 },
+                        { width: 1000, height: 800 });
+
+  assert.deepEqual(ref?.bounds, { x: 0, y: 0, width: 170, height: 130 });
+});
+
+test("an element pick still says it is a view", () => {
+  const { document } = dom(`<button id="go" data-rect="0,0,80,30">Go</button>`);
+  assert.equal(elementRef(q(document, "#go")).kind, "view");
+});
+

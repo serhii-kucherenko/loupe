@@ -84,6 +84,12 @@ public final class OverlayHost {
     /// box owns its own locking, so dropping the host still unhooks everything.
     private let registrations = Registrations()
 
+    /// Where the mouse went down, and in which window, for the whole of one drag.
+    ///
+    /// The window is fixed at mouse-down rather than resolved per event: a rectangle
+    /// dragged half off a sheet should still be a rectangle on that sheet.
+    private var dragOrigin: (window: NSWindow, point: CGPoint)?
+
     /// Width of the strip the tray needs, panel padding included.
     private var trayStripWidth: CGFloat { TrayPanel.width + LoupeTheme.Space.lg * 2 }
 
@@ -171,16 +177,60 @@ public final class OverlayHost {
             return event
         }) { registrations.add(monitor: move) }
 
-        // Only picking consumes clicks. While commenting, the popover's own buttons
-        // need them, so the event goes through untouched.
-        if let click = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] event in
+        // Only picking consumes the mouse. While commenting, the popover's own
+        // buttons need it, so events go through untouched.
+        //
+        // Down, drag and up rather than a single click: the same press has to be
+        // able to become either a pick or a dragged region, and which one it is is
+        // not known until the mouse comes back up.
+        if let down = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] event in
             let consumed = MainActor.assumeIsolated { () -> Bool in
-                guard let self, case .picking = self.model.mode else { return false }
-                self.pick()
+                guard let self, case .picking = self.model.mode,
+                      let target = self.target else { return false }
+                self.dragOrigin = target
                 return true
             }
             return consumed ? nil : event
-        }) { registrations.add(monitor: click) }
+        }) { registrations.add(monitor: down) }
+
+        if let drag = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged], handler: { [weak self] event in
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                guard let self, let origin = self.dragOrigin,
+                      let now = self.target, now.window === origin.window else { return false }
+                self.model.drag(to: Rect(Self.box(origin.point, now.point)))
+                return true
+            }
+            return consumed ? nil : event
+        }) { registrations.add(monitor: drag) }
+
+        if let up = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp], handler: { [weak self] event in
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                guard let self, let origin = self.dragOrigin else { return false }
+                self.dragOrigin = nil
+                self.finishDrag(from: origin)
+                return true
+            }
+            return consumed ? nil : event
+        }) { registrations.add(monitor: up) }
+    }
+
+    static func box(_ a: CGPoint, _ b: CGPoint) -> CGRect {
+        CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
+               width: abs(a.x - b.x), height: abs(a.y - b.y))
+    }
+
+    /// A press that barely moved is a click on an element; one that swept out a
+    /// rectangle is a region. `capture(rect:in:)` decides which, by refusing
+    /// anything under `minimumRegionSize`.
+    private func finishDrag(from origin: (window: NSWindow, point: CGPoint)) {
+        let end = target?.window === origin.window ? target?.point : nil
+        let rect = Self.box(origin.point, end ?? origin.point)
+
+        if let shot = ElementPicker.capture(rect: rect, in: origin.window) {
+            deliver(shot, from: origin.window)
+        } else {
+            pick(at: end ?? origin.point, in: origin.window)
+        }
     }
 
     /// The window under the pointer, and the pointer's position inside it in
@@ -205,14 +255,19 @@ public final class OverlayHost {
         model.hover(ElementPicker.hoverRef(at: target.point, in: target.window))
     }
 
-    private func pick() {
-        guard let target,
-              let shot = ElementPicker.capture(at: target.point, in: target.window) else { return }
-        let size = target.window.contentView?.bounds.size ?? .zero
+    private func pick(at point: CGPoint, in window: NSWindow) {
+        guard let shot = ElementPicker.capture(at: point, in: window) else { return }
+        deliver(shot, from: window)
+    }
+
+    private func deliver(_ shot: (ref: ElementRef, screenshotPNG: Data?,
+                                  contextScreenshotPNG: Data?),
+                         from window: NSWindow) {
+        let size = window.contentView?.bounds.size ?? .zero
         model.pick(shot.ref,
                    screenshotPNG: shot.screenshotPNG,
                    contextScreenshotPNG: shot.contextScreenshotPNG,
-                   screen: target.window.title.isEmpty ? nil : target.window.title,
+                   screen: window.title.isEmpty ? nil : window.title,
                    viewport: Rect(x: 0, y: 0, width: size.width, height: size.height))
     }
 }
@@ -339,15 +394,30 @@ public final class OverlayHost {
         let overlayWindow = window
         // Weak on both: the overlay must never be the reason a window or the model
         // stays alive.
-        let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak scene] point in
-            guard let model, let scene,
-                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow, at: point),
-                  let shot = ElementPicker.capture(at: point, in: target) else { return }
+        func deliver(_ shot: (ref: ElementRef, screenshotPNG: Data?,
+                              contextScreenshotPNG: Data?)?,
+                     to model: OverlayModel, from target: UIWindow) {
+            guard let shot else { return }
             model.pick(shot.ref,
                        screenshotPNG: shot.screenshotPNG,
                        contextScreenshotPNG: shot.contextScreenshotPNG,
                        viewport: Rect(x: 0, y: 0,
                                       width: target.bounds.width, height: target.bounds.height))
+        }
+
+        let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak scene] point in
+            guard let model, let scene,
+                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow, at: point)
+            else { return }
+            deliver(ElementPicker.capture(at: point, in: target), to: model, from: target)
+        }, onDrag: { [weak model, weak scene] rect in
+            guard let model, let scene,
+                  // The centre, not a corner: a rectangle drawn over a dialog should
+                  // find the dialog's window, and a corner can easily sit outside it.
+                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow,
+                                                    at: CGPoint(x: rect.midX, y: rect.midY))
+            else { return }
+            deliver(ElementPicker.capture(rect: rect, in: target), to: model, from: target)
         })
 
         let controller = UIHostingController(rootView: content.ignoresSafeArea())
@@ -407,8 +477,10 @@ private struct SafeAreaReader: UIViewRepresentable {
 private struct OverlayRootWithPill: View {
     @ObservedObject var model: OverlayModel
     var onTap: (CGPoint) -> Void
+    var onDrag: (CGRect) -> Void
 
     @State private var safeArea = EdgeInsets()
+    @State private var dragOrigin: CGPoint?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -423,6 +495,22 @@ private struct OverlayRootWithPill: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { point in onTap(point) }
+                    // A drag draws a region; a tap still picks an element. The
+                    // minimum distance is what keeps them apart - without it a tap
+                    // that moves two points becomes a rectangle nobody meant.
+                    .gesture(
+                        DragGesture(minimumDistance: ElementPicker.minimumRegionSize)
+                            .onChanged { value in
+                                let origin = dragOrigin ?? value.startLocation
+                                dragOrigin = origin
+                                model.drag(to: Rect(box(origin, value.location)))
+                            }
+                            .onEnded { value in
+                                let origin = dragOrigin ?? value.startLocation
+                                dragOrigin = nil
+                                onDrag(box(origin, value.location))
+                            }
+                    )
             }
 
             OverlayRoot(model: model, safeArea: safeArea)
@@ -449,6 +537,11 @@ private struct OverlayRootWithPill: View {
         .onPreferenceChange(InteractiveRegionsKey.self) { regions in
             MainActor.assumeIsolated { model.interactiveRegions = regions }
         }
+    }
+
+    private func box(_ a: CGPoint, _ b: CGPoint) -> CGRect {
+        CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
+               width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
 }
 #endif

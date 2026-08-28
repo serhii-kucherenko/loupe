@@ -120,8 +120,33 @@ export function isBackdrop(element: Element, viewportArea: number): boolean {
   return !isMeaningful(element);
 }
 
+/** The smallest drag worth treating as a region rather than a slipped click. */
+export const MINIMUM_REGION_SIZE = 12;
+
+/**
+ * A dragged rectangle, clipped to the viewport.
+ *
+ * No screenshot: the web capture works by cloning an element into an SVG
+ * `foreignObject`, and a region has no element to clone. `bounds` is what a region
+ * has to say, and `docs/bundle-format.md` already treats every field but bounds as
+ * best-effort.
+ */
+export function regionRef(rect: Rect, viewport: { width: number; height: number }): ElementRef | null {
+  const left = Math.max(0, Math.min(rect.x, rect.x + rect.width));
+  const top = Math.max(0, Math.min(rect.y, rect.y + rect.height));
+  const right = Math.min(viewport.width, Math.max(rect.x, rect.x + rect.width));
+  const bottom = Math.min(viewport.height, Math.max(rect.y, rect.y + rect.height));
+
+  const width = right - left;
+  const height = bottom - top;
+  if (width < MINIMUM_REGION_SIZE || height < MINIMUM_REGION_SIZE) return null;
+
+  return { kind: "region", bounds: { x: left, y: top, width, height } };
+}
+
 export function elementRef(element: Element): ElementRef {
   const ref: ElementRef = {
+    kind: "view",
     className: element.tagName.toLowerCase(),
     selector: cssSelector(element),
     bounds: bounds(element),

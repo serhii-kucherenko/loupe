@@ -210,6 +210,18 @@ if (scene) {
   const rect = (el) => { const b = el.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; };
   setTimeout(async () => {
     loupe.overlay.begin();
+    // Drag-select: mid-gesture with `dragging`, committed with `drag`. The
+    // mid-gesture picture is the one worth looking at - a dashed rectangle that
+    // does not track the pointer makes the gesture unusable however correct the
+    // captured bounds are.
+    if (scene === "drag" || scene === "dragging") {
+      const b = row().getBoundingClientRect();
+      const from = { clientX: b.left - 6, clientY: b.top - 6, bubbles: true };
+      const to = { clientX: b.right + 6, clientY: b.bottom + 40, bubbles: true };
+      document.dispatchEvent(new MouseEvent("mousedown", from));
+      document.dispatchEvent(new MouseEvent("mousemove", to));
+      if (scene === "drag") document.dispatchEvent(new MouseEvent("mouseup", to));
+    }
     if (scene === "hover") {
       const [x, y] = rect(row());
       document.dispatchEvent(new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true }));

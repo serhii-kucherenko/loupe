@@ -21,7 +21,17 @@ export interface Rect {
  * Where the annotation points. Everything but `bounds` is best-effort: the crop plus
  * the trace carry the meaning, so a missing field degrades quality, never correctness.
  */
+/**
+ * Whether the annotation is about a thing on the page or an area of it.
+ *
+ * A region is not a failed pick. Two controls misaligned with each other, the
+ * padding around a group, the gap between two rows: none of those is an element.
+ */
+export type ElementKind = "view" | "region";
+
 export interface ElementRef {
+  /** Absent means `view`, so a bundle written before this existed still means what it meant. */
+  kind?: ElementKind;
   accessibilityID?: string;
   label?: string;
   className?: string;

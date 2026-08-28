@@ -28,6 +28,11 @@ contract: additive changes only, no breaking renames without a major.
 - Visible UI follows `DESIGN.md`. A new token goes in that file **and** `docs/tokens.json`
   in the same change, then `cd web && npm run sync-tokens`. A token that means two things
   on two platforms is worse than no token at all, and CI fails on the drift.
+- Two gestures, not one: a tap picks an element, a drag picks a region. A region is a
+  first-class answer (`element.kind: "region"`), not a failure - a gap between two rows
+  is real feedback and no view corresponds to it. On the web a region carries no crop:
+  the capture works by cloning an element into an SVG `foreignObject`, and there is no
+  element to clone.
 - The bundle format is a contract. Adding a field is safe; renaming or removing one is not.
   Decoders are hand-written on the Swift side precisely so an older bundle still reads.
 - Non-trivial logic leaves one runnable test behind. `swift test` and `cd web && npm test`

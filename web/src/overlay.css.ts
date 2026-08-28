@@ -37,6 +37,17 @@ export function overlayCSS(): string {
 
 /* The picked element, and the number that says which one it is. The outline is
    never the only signal. */
+/* Dashed on purpose: a solid outline is what a resolved element looks like, and the
+   two must never be confused. One says "this is what I found", the other says "this
+   is the area you are drawing". */
+.drag-region {
+  position: absolute;
+  border: var(--loupe-stroke-highlight) dashed var(--loupe-highlight);
+  border-radius: var(--loupe-radius-highlight);
+  background: var(--loupe-highlight-fill);
+  pointer-events: none;
+}
+
 .highlight {
   position: absolute;
   border: var(--loupe-stroke-highlight) solid var(--loupe-highlight);

@@ -70,6 +70,30 @@ enum DemoScene {
                 let row = CGPoint(x: size.width * 0.26, y: size.height * 0.27)
                 let basket = CGPoint(x: size.width * 0.77, y: size.height * 0.165)
 
+                // Drag-select, mid-gesture and then committed. The mid-gesture
+                // frame is the one worth looking at: if the dashed rectangle does
+                // not track the finger, the gesture is unusable however correct the
+                // captured bounds turn out to be.
+                if scene == "drag" || scene == "dragging" {
+                    let from = CGPoint(x: size.width * 0.10, y: size.height * 0.22)
+                    let to = CGPoint(x: size.width * 0.46, y: size.height * 0.34)
+                    model.drag(to: Rect(x: from.x, y: from.y,
+                                        width: to.x - from.x, height: to.y - from.y))
+                    if scene == "drag" {
+                        let rect = CGRect(x: from.x, y: from.y,
+                                          width: to.x - from.x, height: to.y - from.y)
+                        if let shot = ElementPicker.capture(rect: rect, in: window) {
+                            print("LOUPE-SCENE drag: kind=\(shot.ref.kind.rawValue) "
+                                  + "bounds=\(shot.ref.bounds) crop=\(shot.screenshotPNG?.count ?? 0)B")
+                            model.pick(shot.ref,
+                                       screenshotPNG: shot.screenshotPNG,
+                                       contextScreenshotPNG: shot.contextScreenshotPNG,
+                                       viewport: Rect(x: 0, y: 0, width: size.width,
+                                                      height: size.height))
+                        }
+                    }
+                }
+
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

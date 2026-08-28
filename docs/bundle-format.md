@@ -103,6 +103,7 @@ missing field degrades quality, never correctness.
 
 | Field | Type | Meaning |
 |---|---|---|
+| `kind` | `"view"` \| `"region"` | What the annotation points at. Absent means `view`. |
 | `accessibilityID` | string | What the app named the element. The strongest signal for finding it in source. |
 | `label` | string | Visible text or accessibility label. |
 | `className` | string | Runtime type, e.g. `ResultsCollectionView` or `div`. |
@@ -112,12 +113,21 @@ missing field degrades quality, never correctness.
 
 A rect is `{ "x", "y", "width", "height" }`, all numbers, origin top-left.
 
-**An element reference with no `className` is a region, not an element.** Some UI
-frameworks do not back what you see with anything a picker can resolve - SwiftUI on
-iOS draws headings, stacks and backgrounds into one shared layer, so a point over a
-heading is indistinguishable from a point over blank space. Rather than drop the note,
-the SDK captures a fixed box around the point and reports only `bounds`. Read it as
-"the person pointed here"; the crop and the context shot are what carry the meaning.
+**A `kind` of `"region"` means the person drew a rectangle, or the framework could
+resolve nothing.** Both are ordinary, and neither is a failure.
+
+Drag-select is a first-class gesture: plenty of real feedback is about something no
+view corresponds to - two controls misaligned with each other, the padding around a
+group, the gap between two rows. A region says "this area", and `bounds` is the whole
+of what it can say.
+
+The same kind is used when a point cannot be resolved. Some UI frameworks do not back
+what you see with anything a picker can reach - SwiftUI on iOS draws headings, stacks
+and backgrounds into one shared layer, so a point over a heading is indistinguishable
+from a point over blank space. Rather than drop the note, the SDK captures a box
+around the point.
+
+Either way: read `bounds`, and let the crop and the context shot carry the rest.
 
 ### `trace[]`
 

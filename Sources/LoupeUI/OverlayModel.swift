@@ -20,6 +20,13 @@ public final class OverlayModel: ObservableObject {
     /// hit-testing, and republishing it would loop with the layout that produces it.
     /// See `InteractiveRegions.swift`.
     public var interactiveRegions: [CGRect] = []
+    /// The rectangle being dragged out right now, in window points.
+    ///
+    /// Published, unlike `interactiveRegions`, because the whole value of the
+    /// gesture is watching the rectangle follow your finger. Nothing is captured
+    /// until the drag ends.
+    @Published public private(set) var dragRegion: Rect?
+
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
 
@@ -64,6 +71,12 @@ public final class OverlayModel: ObservableObject {
     public func hover(_ ref: ElementRef?) {
         guard case .picking = mode else { return }
         set(.picking(hover: ref))
+    }
+
+    /// The person is dragging a rectangle out. Feedback only.
+    public func drag(to rect: Rect?) {
+        guard case .picking = mode else { return }
+        dragRegion = rect
     }
 
     /// The person clicked an element. Pins it and opens the popover.
@@ -183,6 +196,9 @@ public final class OverlayModel: ObservableObject {
 
     private func set(_ new: OverlayMode) {
         guard new != mode else { return }
+        // Any change of mode ends a drag. `drag(to:)` never comes through here, so
+        // this cannot wipe the rectangle out from under the gesture that owns it.
+        dragRegion = nil
         mode = new
         onModeChange?(new)
     }

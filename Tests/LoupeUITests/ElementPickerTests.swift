@@ -227,5 +227,71 @@ final class ElementLabelTests: XCTestCase {
         XCTAssertLessThanOrEqual(text?.count ?? 0, 80)
     }
 }
-#endif
 
+/// Drag-select. Serhii asked for this twice unprompted: "loupe doesn't give good
+/// selection (click, draw around the area)". A region is not a failed view pick -
+/// two controls misaligned with each other, the padding around a group, the gap
+/// between two rows are all things no view corresponds to.
+@MainActor
+final class DragRegionTests: XCTestCase {
+
+    private func window() -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        return window
+    }
+
+    func testADraggedRectangleIsCapturedAsItWasDrawn() {
+        let shot = ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
+                                         in: window())
+
+        XCTAssertEqual(shot?.ref.kind, .region)
+        XCTAssertNil(shot?.ref.className, "a region is not a view and does not pretend to be")
+        XCTAssertEqual(shot?.ref.bounds.x, 50)
+        XCTAssertEqual(shot?.ref.bounds.width, 120)
+        XCTAssertEqual(shot?.ref.bounds.height, 80)
+        XCTAssertNotNil(shot?.screenshotPNG)
+        XCTAssertNotNil(shot?.contextScreenshotPNG)
+    }
+
+    /// Dragging up and to the left is the same rectangle as dragging down and right.
+    func testDraggingBackwardsIsTheSameRectangle() {
+        let forward = ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
+                                            in: window())
+        let backward = ElementPicker.capture(rect: CGRect(x: 170, y: 140, width: -120, height: -80),
+                                             in: window())
+
+        XCTAssertEqual(forward?.ref.bounds, backward?.ref.bounds)
+    }
+
+    /// Otherwise a click that slipped two points would become a rectangle nobody meant.
+    func testATinyDragIsNotARegion() {
+        let tiny = CGRect(x: 50, y: 60,
+                          width: ElementPicker.minimumRegionSize - 1,
+                          height: ElementPicker.minimumRegionSize - 1)
+        XCTAssertNil(ElementPicker.capture(rect: tiny, in: window()))
+    }
+
+    func testARectangleDraggedOffTheEdgeIsClippedToTheWindow() {
+        let shot = ElementPicker.capture(rect: CGRect(x: -40, y: -30, width: 200, height: 150),
+                                         in: window())
+
+        XCTAssertEqual(shot?.ref.bounds.x, 0)
+        XCTAssertEqual(shot?.ref.bounds.y, 0)
+        XCTAssertEqual(shot?.ref.bounds.width, 160)
+        XCTAssertEqual(shot?.ref.bounds.height, 120)
+    }
+
+    /// A pick on a real element still says so, which is what keeps tap-to-pick worth
+    /// having alongside the gesture.
+    func testAnElementPickIsStillAView() {
+        let window = window()
+        let card = NSView(frame: NSRect(x: 50, y: 50, width: 100, height: 60))
+        card.identifier = NSUserInterfaceItemIdentifier("product.card")
+        window.contentView?.addSubview(card)
+
+        XCTAssertEqual(ElementPicker.pick(at: CGPoint(x: 100, y: 220), in: window)?.ref.kind, .view)
+    }
+}
+#endif

@@ -75,7 +75,12 @@ public struct OverlayRoot: View {
     private var highlight: some View {
         switch model.mode {
         case .picking(let hovered):
-            if let hovered {
+            // The rectangle wins while it is being dragged. Drawing the hover
+            // highlight underneath it as well says two different things about what
+            // is about to be captured.
+            if let dragged = model.dragRegion {
+                DragRegionLayer(rect: rect(dragged))
+            } else if let hovered {
                 HighlightLayer(rect: rect(hovered.bounds),
                                badge: model.annotations.count + 1,
                                isPinned: false)

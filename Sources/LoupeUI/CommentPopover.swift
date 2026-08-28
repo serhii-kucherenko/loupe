@@ -99,18 +99,41 @@ struct CommentPopover: View {
         // every child, so the field, the four tag chips, Cancel and Save all reported
         // the same sentence and VoiceOver could not tell Save from Cancel.
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Comment on \(pick.ref.label ?? pick.ref.className ?? "the picked element")")
+        .accessibilityLabel("Comment on \(pick.ref.label ?? pick.ref.className ?? fallbackName)")
+    }
+
+    /// A region is not an element and must not be labelled as one. Calling a
+    /// rectangle somebody drew "Element / nil" is the panel disagreeing with what
+    /// they just did.
+    private var title: String {
+        switch pick.ref.kind {
+        case .region: return "Region"
+        case .view: return pick.ref.label ?? pick.ref.accessibilityID ?? "Element"
+        }
+    }
+
+    private var subtitle: String? {
+        switch pick.ref.kind {
+        case .region:
+            return "\(Int(pick.ref.bounds.width))×\(Int(pick.ref.bounds.height))"
+        case .view:
+            return pick.ref.accessibilityID ?? pick.ref.className
+        }
+    }
+
+    private var fallbackName: String {
+        pick.ref.kind == .region ? "the area you drew" : "the picked element"
     }
 
     private var header: some View {
         HStack(spacing: LoupeTheme.Space.sm) {
             BadgeView(number: pick.index)
             VStack(alignment: .leading, spacing: 0) {
-                Text(pick.ref.label ?? pick.ref.accessibilityID ?? "Element")
+                Text(title)
                     .font(LoupeTheme.Typography.label)
                     .foregroundStyle(LoupeTheme.Colors.ink.color)
                     .lineLimit(1)
-                if let detail = pick.ref.accessibilityID ?? pick.ref.className {
+                if let detail = subtitle {
                     Text(detail)
                         .font(LoupeTheme.Typography.caption)
                         .foregroundStyle(LoupeTheme.Colors.inkSoft.color)

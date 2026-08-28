@@ -7,7 +7,22 @@ public enum AnnotationTag: String, Codable, Sendable, CaseIterable {
 
 /// Where the annotation points. Everything here is best-effort: the crop plus the
 /// trace carry the meaning, so a missing field degrades quality, never correctness.
+/// Whether the annotation is about a thing on screen or an area of it.
+///
+/// A region is not a failed view pick. Plenty of real feedback is about something
+/// no view corresponds to: two controls misaligned with each other, the padding
+/// around a group, the gap between two rows. Those have bounds and nothing else,
+/// and saying so plainly is more useful than naming whichever ancestor happened to
+/// be underneath.
+public enum ElementKind: String, Codable, Sendable, Equatable {
+    case view
+    case region
+}
+
 public struct ElementRef: Codable, Sendable, Equatable {
+    /// Defaults to `.view`, so a bundle written before this field existed still
+    /// means what it meant.
+    public var kind: ElementKind
     /// Accessibility identifier, when the app sets one.
     public var accessibilityID: String?
     /// Visible label or title, useful for the agent to locate the view in source.
@@ -24,6 +39,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
     public var bounds: Rect
 
     public init(
+        kind: ElementKind = .view,
         accessibilityID: String? = nil,
         label: String? = nil,
         className: String? = nil,
@@ -32,6 +48,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
         sourceLine: Int? = nil,
         bounds: Rect
     ) {
+        self.kind = kind
         self.accessibilityID = accessibilityID
         self.label = label
         self.className = className
@@ -43,6 +60,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decodeIfPresent(ElementKind.self, forKey: .kind) ?? .view
         accessibilityID = try c.decodeIfPresent(String.self, forKey: .accessibilityID)
         label = try c.decodeIfPresent(String.self, forKey: .label)
         className = try c.decodeIfPresent(String.self, forKey: .className)

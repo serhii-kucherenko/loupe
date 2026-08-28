@@ -102,6 +102,14 @@
       ],
       "additionalProperties": true,
       "properties": {
+        "kind": {
+          "enum": [
+            "view",
+            "region"
+          ],
+          "default": "view",
+          "description": "Whether the annotation is about a thing on screen or an area of it. Absent means view: bundles written before this field existed still mean what they meant. A region carries bounds and usually nothing else, because nothing on screen corresponds to it."
+        },
         "accessibilityID": {
           "type": "string"
         },

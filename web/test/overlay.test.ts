@@ -189,7 +189,7 @@ test("the overlay never annotates itself", async () => {
   await overlay.pickAt(900, 30);
   if (overlay.currentMode.kind === "commenting") {
     const host = document.querySelector("loupe-overlay")!;
-    assert.ok(!host.contains(overlay.currentMode.pick.element),
+    assert.ok(!host.contains(overlay.currentMode.pick.element ?? null),
       "the overlay picked one of its own elements");
   }
 });
