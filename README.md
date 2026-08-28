@@ -70,12 +70,14 @@ Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
 Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.1")
+.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.2")
 ```
 
 Pre-1.0 on purpose: the bundle format is settled, but the SDK API is young, so the shape
-may still move. Take 0.1.1 or later: 0.1.0 predates Mac Catalyst support and the fix that
-makes the overlay's own controls tappable on iOS.
+may still move. Take 0.1.2 or later. It is the first version that can send into Linear, and
+the first where the picker is trustworthy on iOS: earlier ones could not reliably take a tap
+on their own controls, and could hand you a whole shelf of the screen when you pointed at one
+row inside it.
 
 **If SwiftPM refuses to resolve Loupe at all**, with a fingerprint or "not signed with the
 same identity" error, delete `~/Library/org.swift.swiftpm/security/fingerprints/loupe-*.json`
@@ -89,6 +91,7 @@ Then add the products you need. `LoupeCore` alone is enough to read or write bun
 ```swift
 .product(name: "LoupeCore", package: "loupe"),
 .product(name: "LoupeUI", package: "loupe"),
+.product(name: "LoupeLinear", package: "loupe"),  // only if you want the Linear delivery
 ```
 
 Requires Swift 5.9, macOS 13, or iOS 16. **Mac Catalyst is supported**, and the sources
