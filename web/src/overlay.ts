@@ -141,6 +141,7 @@ export class Overlay {
   }
 
   async pickAt(x: number, y: number): Promise<void> {
+    this.resolveDraftAndResumePicking();
     if (this.mode.kind !== "picking") return;
     const element = pickElement(x, y, this.doc, (hit) => this.isOurs(hit));
     if (!element) return;
@@ -161,6 +162,7 @@ export class Overlay {
    * real feedback is about something no element corresponds to.
    */
   pickRegion(rect: Rect): void {
+    this.resolveDraftAndResumePicking();
     if (this.mode.kind !== "picking") return;
     const ref = regionRef(rect, {
       width: this.view.innerWidth,
@@ -171,6 +173,23 @@ export class Overlay {
       kind: "commenting",
       pick: { ref, index: this.session.count + 1 },
     });
+  }
+
+  /**
+   * Pointing somewhere else while a comment is open.
+   *
+   * An empty draft is thrown away, because nothing was said. A draft with words in
+   * it becomes a note first: silently discarding what somebody typed is the one
+   * unacceptable option, and the tray already has per-note delete.
+   */
+  resolveDraftAndResumePicking(): void {
+    if (this.mode.kind !== "commenting") return;
+    if (this.draft.comment.trim()) {
+      this.saveComment();
+      this.resumePicking();
+    } else {
+      this.cancelComment();
+    }
   }
 
   /** Backing out of a comment returns you to picking, not out of annotate mode. */
@@ -282,7 +301,9 @@ export class Overlay {
   private updatePageListeners(): void {
     this.pageListeners.forEach((off) => off());
     this.pageListeners = [];
-    if (this.mode.kind !== "picking") return;
+    // Also while commenting: pointing somewhere else used to hit nothing, so the
+    // only way to change your mind was to find Cancel first.
+    if (this.mode.kind !== "picking" && this.mode.kind !== "commenting") return;
 
     const onMove = (event: MouseEvent) => {
       if (this.dragRect) return;

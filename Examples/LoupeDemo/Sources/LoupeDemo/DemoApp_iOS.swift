@@ -126,6 +126,22 @@ enum DemoScene {
                 // Which window holds the keyboard, in each mode. The host's own key
                 // commands go to the key window's responder chain, so an overlay
                 // that keeps key status silently breaks them.
+                // SER-695: point somewhere, type nothing, point somewhere else.
+                // The second pick must land rather than hit a dead overlay.
+                if scene == "repick" {
+                    let first = CGPoint(x: size.width * 0.26, y: size.height * 0.27)
+                    let second = CGPoint(x: size.width * 0.26, y: size.height * 0.40)
+                    pick(at: first, in: window, model: model)
+                    print("LOUPE-REPICK after first: \(model.mode)")
+                    model.resolveDraftAndResumePicking()
+                    pick(at: second, in: window, model: model)
+                    if case .commenting(let p) = model.mode {
+                        print("LOUPE-REPICK second landed: bounds=\(p.ref.bounds)")
+                    } else {
+                        print("LOUPE-REPICK second did not land: \(model.mode)")
+                    }
+                }
+
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

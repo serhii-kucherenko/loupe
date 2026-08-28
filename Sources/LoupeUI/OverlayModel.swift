@@ -27,6 +27,13 @@ public final class OverlayModel: ObservableObject {
     /// until the drag ends.
     @Published public private(set) var dragRegion: Rect?
 
+    /// What is typed into the open comment popover.
+    ///
+    /// On the model rather than in the popover's own `@State`, because an outside
+    /// tap has to be able to decide what to do with it, and a view cannot be asked.
+    @Published public var draftComment = ""
+    @Published public var draftTag: AnnotationTag?
+
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
 
@@ -73,6 +80,29 @@ public final class OverlayModel: ObservableObject {
         set(.picking(hover: ref))
     }
 
+    /// Pointing somewhere else while a comment is open.
+    ///
+    /// Reported as friction: "when I point at smth I can't then simply point at
+    /// another place, I need to manually close the previously clicked unsaved one".
+    ///
+    /// An empty draft is thrown away, because nothing was said. A draft with words
+    /// in it becomes a note first: silently discarding what somebody typed is the
+    /// one unacceptable option here, and the tray already has per-note delete for
+    /// anyone who did not mean it.
+    @discardableResult
+    public func resolveDraftAndResumePicking() -> Annotation? {
+        guard case .commenting = mode else { return nil }
+
+        guard !draftComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            cancelComment()
+            return nil
+        }
+
+        let saved = saveComment(draftComment, tag: draftTag)
+        resumePicking()
+        return saved
+    }
+
     /// The person is dragging a rectangle out. Feedback only.
     public func drag(to rect: Rect?) {
         guard case .picking = mode else { return }
@@ -84,6 +114,8 @@ public final class OverlayModel: ObservableObject {
                      contextScreenshotPNG: Data? = nil,
                      screen: String? = nil, viewport: Rect? = nil) {
         guard case .picking = mode else { return }
+        draftComment = ""
+        draftTag = nil
         set(.commenting(PendingPick(ref: ref, screenshotPNG: screenshotPNG,
                                     contextScreenshotPNG: contextScreenshotPNG,
                                     index: annotations.count + 1,
@@ -94,6 +126,8 @@ public final class OverlayModel: ObservableObject {
     /// Cancelling one pick is not the same as being finished.
     public func cancelComment() {
         guard case .commenting = mode else { return }
+        draftComment = ""
+        draftTag = nil
         set(.picking(hover: nil))
     }
 
@@ -118,6 +152,8 @@ public final class OverlayModel: ObservableObject {
 
         session.add(annotation)
         annotations = session.annotations
+        draftComment = ""
+        draftTag = nil
         set(.browsing)
         return annotation
     }

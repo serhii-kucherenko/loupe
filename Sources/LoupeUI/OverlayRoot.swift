@@ -57,9 +57,14 @@ public struct OverlayRoot: View {
                     CommentPopover(
                         pick: pick,
                         onSave: { model.saveComment($0, tag: $1) },
-                        onCancel: { model.cancelComment() })
+                        onCancel: { model.cancelComment() },
+                        comment: $model.draftComment,
+                        tag: $model.draftTag)
                     .frame(width: frame.width, alignment: .topLeading)
                     .position(x: frame.midX, y: frame.minY + frame.height / 2)
+                    // So a click outside it can be told from a click on it, on
+                    // every platform. See `InteractiveRegions.swift`.
+                    .loupeInteractive()
                 }
 
                 tray(in: geometry.size, insets: safeArea)

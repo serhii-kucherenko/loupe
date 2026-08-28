@@ -186,8 +186,19 @@ public final class OverlayHost {
         // not known until the mouse comes back up.
         if let down = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown], handler: { [weak self] event in
             let consumed = MainActor.assumeIsolated { () -> Bool in
-                guard let self, case .picking = self.model.mode,
+                guard let self, self.model.mode.swallowsInput,
                       let target = self.target else { return false }
+
+                // While commenting, a click on the popover belongs to the popover -
+                // its own Save and Cancel would stop working otherwise. Anything
+                // outside it means "actually, that one" and starts a fresh pick.
+                if case .commenting = self.model.mode {
+                    let onPanel = self.model.interactiveRegions
+                        .contains { $0.contains(target.point) }
+                    guard !onPanel else { return false }
+                    self.model.resolveDraftAndResumePicking()
+                }
+
                 self.dragOrigin = target
                 return true
             }
@@ -437,6 +448,7 @@ public final class OverlayHost {
             guard let model, let scene,
                   let target = WindowFinder.topmost(in: scene, excluding: overlayWindow, at: point)
             else { return }
+            model.resolveDraftAndResumePicking()
             deliver(ElementPicker.capture(at: point, in: target), to: model, from: target)
         }, onDrag: { [weak model, weak scene] rect in
             guard let model, let scene,
@@ -445,6 +457,7 @@ public final class OverlayHost {
                   let target = WindowFinder.topmost(in: scene, excluding: overlayWindow,
                                                     at: CGPoint(x: rect.midX, y: rect.midY))
             else { return }
+            model.resolveDraftAndResumePicking()
             deliver(ElementPicker.capture(rect: rect, in: target), to: model, from: target)
         })
 
@@ -544,7 +557,11 @@ private struct OverlayRootWithPill: View {
             // the time, which made an idle overlay hit-testable across the entire
             // screen - one SwiftUI implementation detail away from making the host
             // app unusable.
-            if case .picking = model.mode {
+            // Also while commenting, which is the whole of SER-695: pointing
+            // somewhere else used to hit nothing, so the only way to change your
+            // mind was to find Cancel first. The catcher sits under the panels, so
+            // the popover's own controls still get their touches.
+            if model.mode.swallowsInput {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { point in onTap(point) }

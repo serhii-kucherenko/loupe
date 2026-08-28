@@ -42,8 +42,10 @@ struct CommentPopover: View {
     var onSave: (String, AnnotationTag?) -> Void
     var onCancel: () -> Void
 
-    @State private var comment = ""
-    @State private var tag: AnnotationTag?
+    /// Bound to the model, not local state: an outside tap has to be able to decide
+    /// what to do with what has been typed, and a view cannot be asked.
+    @Binding var comment: String
+    @Binding var tag: AnnotationTag?
     @FocusState private var fieldFocused: Bool
     @FocusState private var chipFocused: AnnotationTag?
     @FocusState private var saveFocused: Bool

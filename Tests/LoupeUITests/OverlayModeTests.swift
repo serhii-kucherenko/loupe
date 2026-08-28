@@ -282,3 +282,60 @@ final class TrayVisibilityTests: XCTestCase {
         }
     }
 }
+
+/// SER-695, reported as friction: "when I point at smth I can't then simply point at
+/// another place, I need to manually close the previously clicked unsaved one".
+@MainActor
+final class RepickWhileCommentingTests: XCTestCase {
+
+    private func commenting() -> OverlayModel {
+        let model = OverlayModel(session: AnnotationSession(
+            app: AppInfo(name: "Demo", platform: "macOS"), transport: SpyTransport()))
+        model.beginAnnotating()
+        model.pick(ref("row"))
+        return model
+    }
+
+    func testAnEmptyDraftIsThrownAwayAndPickingResumes() {
+        let model = commenting()
+
+        model.resolveDraftAndResumePicking()
+
+        XCTAssertEqual(model.mode, .picking(hover: nil), "ready for the next pick")
+        XCTAssertTrue(model.annotations.isEmpty, "nothing was said, so nothing is kept")
+    }
+
+    // The one unacceptable option is silently dropping what somebody typed.
+    func testADraftWithWordsInItBecomesANoteFirst() {
+        let model = commenting()
+        model.draftComment = "this row is unreadable"
+        model.draftTag = .polish
+
+        model.resolveDraftAndResumePicking()
+
+        XCTAssertEqual(model.mode, .picking(hover: nil))
+        XCTAssertEqual(model.annotations.count, 1)
+        XCTAssertEqual(model.annotations.first?.comment, "this row is unreadable")
+        XCTAssertEqual(model.annotations.first?.tag, .polish)
+    }
+
+    func testTheDraftDoesNotLeakIntoTheNextComment() {
+        let model = commenting()
+        model.draftComment = "first"
+        model.resolveDraftAndResumePicking()
+
+        model.pick(ref("another row"))
+
+        XCTAssertEqual(model.draftComment, "", "a new pick starts with an empty field")
+        XCTAssertNil(model.draftTag)
+    }
+
+    func testItDoesNothingWhenNoCommentIsOpen() {
+        let model = OverlayModel(session: AnnotationSession(
+            app: AppInfo(name: "Demo", platform: "macOS"), transport: SpyTransport()))
+
+        model.resolveDraftAndResumePicking()
+
+        XCTAssertEqual(model.mode, .off)
+    }
+}
