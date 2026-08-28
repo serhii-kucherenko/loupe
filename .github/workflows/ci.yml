@@ -30,21 +30,31 @@ jobs:
         run: swift test -v
 
   ios:
-    name: Build (iOS)
+    name: Build and test (iOS)
     runs-on: macos-14
-    # LoupeUI's UIKit paths never compile on macOS, so the macOS job cannot
-    # catch a break in them. This job is the only thing that does.
+    # LoupeUI's UIKit paths never compile on macOS, so the macOS job cannot catch a
+    # break in them - and until this job ran tests rather than only a build, the
+    # UIKit half of the picker had no coverage at all.
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build for iOS Simulator
+      # Named dynamically: `test` needs a concrete simulator, unlike `build`, and
+      # hard-coding a model is what broke this job the last time Xcode dropped one.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          NAME=$(xcrun simctl list devices available | grep -oE '^ +iPhone [^(]+' | head -1 | xargs)
+          echo "Using $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test on the iOS Simulator
         # pipefail matters here: without it the pipeline reports xcpretty's exit
         # code, so a failed build is reported as a passing job.
         run: |
           set -o pipefail
-          xcodebuild build \
-            -scheme LoupeUI \
-            -destination 'generic/platform=iOS Simulator' \
+          xcodebuild test \
+            -scheme Loupe-Package \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
