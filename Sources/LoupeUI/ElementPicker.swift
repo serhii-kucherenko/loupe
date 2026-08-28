@@ -25,9 +25,20 @@ public enum ElementPicker {
     /// A view is meaningful when the app has named it, or when it is an interactive
     /// control. Those are the two signals that survive across UI frameworks.
     ///
-    /// The climb also stops before swallowing the screen: an ancestor covering most
-    /// of the window is a container, not the thing you pointed at.
-    static let maxWindowAreaFraction = 0.8
+    /// Above this share of the window, something nobody named is not an element
+    /// anyone pointed at.
+    ///
+    /// Was 0.8, which is far too generous. A SwiftUI shelf on an iPad reported as
+    /// one element at 1032x621 - every book on the screen, the search field and the
+    /// filter chips - and that is only 45% of the window, so it sailed through.
+    /// Past about a third, a crop stops answering "what is this element" and becomes
+    /// a screenshot, which the context shot already provides.
+    ///
+    /// Deliberately a measurement rather than a list of framework class names.
+    /// `PlatformGroupContainer` is the culprit today, but it is a private SwiftUI
+    /// type that can be renamed in any OS release, and a rule keyed on it would go
+    /// quiet rather than fail when that happens.
+    static let maxWindowAreaFraction = 1.0 / 3.0
 
     /// - Parameter point: top-left origin, in viewport points, on **every**
     ///   platform. AppKit's bottom-left origin is an AppKit detail and is dealt
@@ -51,10 +62,13 @@ public enum ElementPicker {
     /// pointing at it means it.
     @MainActor
     static func isBackdrop(_ view: PlatformView, in window: PlatformWindow) -> Bool {
-        let windowArea = area(of: windowBounds(window))
-        guard windowArea > 0,
-              area(of: view.bounds) / windowArea > maxWindowAreaFraction else { return false }
+        guard isTooLarge(view, area(of: windowBounds(window))) else { return false }
         return !isMeaningful(view)
+    }
+
+    @MainActor
+    private static func isTooLarge(_ view: PlatformView, _ windowArea: CGFloat) -> Bool {
+        windowArea > 0 && area(of: view.bounds) / windowArea > maxWindowAreaFraction
     }
 
     /// Climbs from the hit view to the element a person would say they clicked.
@@ -64,10 +78,12 @@ public enum ElementPicker {
         var current = view
 
         while !isMeaningful(current), let parent = current.superview {
-            // A container that covers most of the window is never what you meant.
-            if windowArea > 0, area(of: parent.bounds) / windowArea > maxWindowAreaFraction {
-                break
-            }
+            // A container that covers most of the window is never what you meant,
+            // named or not. That is not in tension with `isBackdrop` letting a named
+            // full-screen element through: there, the big thing is what the person
+            // hit, and there was nothing more specific to offer. Here the walk
+            // already has something more specific and would be giving it away.
+            if isTooLarge(parent, windowArea) { break }
             current = parent
         }
         return current
@@ -320,7 +336,7 @@ public enum ElementPicker {
 
     @MainActor
     private static func reference(for view: PlatformView, in window: PlatformWindow) -> ElementRef {
-        let frame = boundsInWindow(view, window)
+        let frame = clamped(boundsInWindow(view, window), to: window)
         return ElementRef(
             accessibilityID: identifier(of: view),
             label: label(of: view),
@@ -332,6 +348,24 @@ public enum ElementPicker {
 
     /// Always top-left origin, on every platform.
     ///
+    /// The part of the element that is actually on screen.
+    ///
+    /// A scrolling container reported `{-14, 50, 1046, 635}` in a 1032-wide window on
+    /// an iPad: wider than the screen, starting off the left edge. Bounds like that
+    /// draw the highlight and the context outline in the wrong place, and
+    /// `docs/bundle-format.md` says bounds are in `viewport` coordinates, which a
+    /// negative origin is not. Clipping is also the more useful answer: it is the
+    /// part of the element the person could see when they pointed at it.
+    ///
+    /// An element entirely off screen keeps its raw frame rather than becoming
+    /// nothing, because "where is it" is still worth reporting.
+    @MainActor
+    private static func clamped(_ frame: CGRect, to window: PlatformWindow) -> CGRect {
+        let viewport = CGRect(origin: .zero, size: windowBounds(window).size)
+        let visible = frame.intersection(viewport)
+        return visible.isNull || visible.isEmpty ? frame : visible
+    }
+
     /// AppKit windows are bottom-left, so a raw `convert` here would put macOS
     /// bounds in a different coordinate space from iOS ones. The bundle format
     /// promises one space (`docs/bundle-format.md`), and the overlay draws in the

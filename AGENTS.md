@@ -35,6 +35,11 @@ contract: additive changes only, no breaking renames without a major.
 - The meaningful-ancestor walk is the correctness core, on both platforms. Changes there
   need a test. Two bugs have already come out of it: AppKit's static labels are
   `NSControl`s, and `elementFromPoint` retargets shadow content to the host.
+- The size ceiling on the walk is `maxWindowAreaFraction`, one third. It is a
+  measurement rather than a list of framework class names on purpose: a rule keyed on
+  a private type like `PlatformGroupContainer` goes quiet instead of failing when the
+  OS renames it. Reported bounds are clipped to the viewport, because a scrolling
+  container can report a frame wider than the window with a negative origin.
 - A point the framework cannot resolve still captures: `ElementPicker.capture` falls back
   to a fixed box around it (`region`), and every capture path goes through that one call
   so the fallback cannot be wired into one platform and forgotten in another. A reference

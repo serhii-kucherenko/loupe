@@ -11,6 +11,15 @@ import type { ElementRef, Rect } from "./types.js";
  */
 
 /** An ancestor covering most of the viewport is a container, not the thing you meant. */
+/**
+ * Deliberately looser than the Swift SDK's one third.
+ *
+ * There, the walk routinely lands on a SwiftUI layout container that no `<div>`
+ * corresponds to, because SwiftUI backs almost nothing with a real view. Here every
+ * element is real and the climb stops at a named or interactive one far more often,
+ * so a `<section>` covering half the viewport is usually a section somebody meant.
+ * Same rule, different platform, different number - not an oversight.
+ */
 export const MAX_VIEWPORT_AREA_FRACTION = 0.8;
 
 const INTERACTIVE_TAGS = new Set([

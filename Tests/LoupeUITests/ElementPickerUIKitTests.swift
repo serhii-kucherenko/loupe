@@ -185,5 +185,80 @@ final class ElementRegionUIKitTests: XCTestCase {
         XCTAssertEqual(shot?.ref.bounds.width, 100)
     }
 }
+
+/// SER-684, measured in a real SwiftUI app on an iPad Pro 13-inch (1032x1376pt):
+/// tapping one book on a shelf reported `PlatformGroupContainer` at
+/// `{0, 32, 1032, 621}` - every book, the search field and the filter chips as one
+/// element - and a second run gave `{-14, 50, 1046, 635}`, wider than the window
+/// with a negative origin.
+@MainActor
+final class OversizedElementUIKitTests: XCTestCase {
+
+    /// The real device size, so the fractions in these tests are the real fractions.
+    private func iPad(_ build: (UIView) -> Void) -> UIWindow {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1032, height: 1376))
+        let root = UIViewController()
+        root.view.frame = window.bounds
+        window.rootViewController = root
+        window.isHidden = false
+        build(root.view)
+        return window
+    }
+
+    func testAShelfSizedContainerNobodyNamedIsNotAnElement() {
+        // 45% of the window. The old ceiling was 80%, so this went straight through.
+        let window = iPad { root in
+            root.addSubview(UIView(frame: CGRect(x: 0, y: 32, width: 1032, height: 621)))
+        }
+
+        XCTAssertNil(ElementPicker.pick(at: CGPoint(x: 300, y: 200), in: window),
+                     "a shelf is not one element")
+    }
+
+    /// And the tool still answers, because answering is the point.
+    func testTheShelfStillCapturesAsARegion() {
+        let window = iPad { root in
+            root.addSubview(UIView(frame: CGRect(x: 0, y: 32, width: 1032, height: 621)))
+        }
+
+        let shot = ElementPicker.capture(at: CGPoint(x: 300, y: 200), in: window)
+
+        XCTAssertNotNil(shot)
+        XCTAssertNil(shot?.ref.className)
+        XCTAssertEqual(shot?.ref.bounds.width, ElementPicker.regionSize)
+    }
+
+    func testBoundsNeverLeaveTheViewport() {
+        let window = iPad { root in
+            // Overhanging both edges, exactly as the device reported it.
+            let scroller = UIView(frame: CGRect(x: -14, y: 50, width: 1046, height: 200))
+            scroller.accessibilityIdentifier = "shelf.scroller"
+            root.addSubview(scroller)
+        }
+
+        let picked = ElementPicker.pick(at: CGPoint(x: 300, y: 100), in: window)
+
+        XCTAssertEqual(picked?.ref.accessibilityID, "shelf.scroller")
+        XCTAssertEqual(picked?.ref.bounds.x, 0, "a negative origin is not a viewport coordinate")
+        XCTAssertEqual(picked?.ref.bounds.width, 1032, "nothing is wider than the window")
+    }
+
+    /// The rule is about size, not about being unnamed: a row the app named is still
+    /// the answer, which is what `docs/agent-install.md` asks hosts to do.
+    func testANamedRowIsStillPickedWhateverIsAroundIt() {
+        let window = iPad { root in
+            let shelf = UIView(frame: CGRect(x: 0, y: 32, width: 1032, height: 621))
+            let row = UIView(frame: CGRect(x: 16, y: 16, width: 1000, height: 96))
+            row.accessibilityIdentifier = "shelf.row.4"
+            shelf.addSubview(row)
+            root.addSubview(shelf)
+        }
+
+        let picked = ElementPicker.pick(at: CGPoint(x: 300, y: 80), in: window)
+
+        XCTAssertEqual(picked?.ref.accessibilityID, "shelf.row.4")
+        XCTAssertEqual(picked?.ref.bounds.height, 96)
+    }
+}
 #endif
 
