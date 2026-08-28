@@ -15,12 +15,35 @@ Apple platforms first: **macOS and iPad/iPhone**. Web and Electron are next.
 
 Handing an AI coding agent "the search feels wrong" gets you a guess. Handing it the
 element you pointed at, a picture of it, and the exact request that fired behind it gets
-you a fix. Loupe is the capture side of that. What happens after the bundle leaves is a
-separate project, [Autopilot](https://github.com/serhii-kucherenko/autopilot).
+you a fix. Loupe is the capture side of that.
+
+## Related: Autopilot
+
+**Loupe captures. [Autopilot](../../autopilot/repo) decides what to do about it.**
+
+Loupe hands over a bundle and stops there. Autopilot is the loop on the other side: triage
+into tickets, an agent that builds them, staging, and the review that closes it.
+
+The seam between the two is the bundle format, and it is deliberate. Loupe only ever POSTs
+to a URL you configure, with no opinion about issue trackers or agents, so you can adopt
+the capture without adopting the loop. Autopilot can equally take input from anywhere else.
+
+| | What it is | Where |
+|---|---|---|
+| **Loupe** | the annotation SDK, in your app | this repo · [Linear](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084) |
+| **Autopilot** | the loop the bundles feed | `../../autopilot/repo` · [Linear](https://linear.app/serhii-kucherenko/project/autopilot-0e1846433181) |
+
+Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
 
 ## Install
 
-Swift Package Manager:
+Not published yet, so point at the checkout:
+
+```swift
+.package(path: "../loupe")
+```
+
+Once it is on GitHub:
 
 ```swift
 .package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.0")
@@ -78,7 +101,7 @@ which endpoint a screen calls.
 
 Early. The core, the recorder, the transports, and the picker work and are tested. The
 on-screen overlay and the tray UI are the next piece. See the
-[Linear project](https://linear.app/serhii-kucherenko/project/loupe-51d5ad5bc003).
+[Linear project](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084).
 
 ## Licence
 

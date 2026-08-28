@@ -2,7 +2,7 @@
 
 `project_tracker: linear`
 
-The ordered list of work lives in the [Linear project](https://linear.app/serhii-kucherenko/project/loupe-51d5ad5bc003).
+The ordered list of work lives in the [Linear project](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084).
 Do not create a ROADMAP.md or a plans directory here: two lists mean two truths and both rot.
 
 ## What this is
