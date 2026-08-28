@@ -3,6 +3,14 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Re-running a release should not need tag gymnastics. Pushing a tag that already
+  # exists fires no event, so without this the only way to retry was to delete the
+  # remote tag and push it again.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to release, e.g. v0.1.0
+        required: true
 
 permissions:
   contents: read
@@ -13,6 +21,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - run: swift test
       - uses: actions/setup-node@v4
         with:
@@ -31,6 +41,8 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       # The Swift half releases on the git tag alone, so a missing npm token must
       # not turn the whole release red. It skips and says so.
@@ -58,7 +70,8 @@ jobs:
       - name: The tag and package.json agree
         if: steps.token.outputs.have == 'yes'
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG="${TAG#v}"
           PKG=$(node -p "require('./package.json').version")
           if [ "$TAG" != "$PKG" ]; then
             echo "tag $TAG does not match package.json $PKG"
