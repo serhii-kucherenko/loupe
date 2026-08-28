@@ -170,8 +170,11 @@ final class LoupeEntryPointTests: XCTestCase {
     private let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString)
 
-    override func setUp() {
-        super.setUp()
+    // `async` on purpose: a plain `setUp()` is nonisolated even inside a
+    // `@MainActor` class, so it cannot call `Loupe.start`. Caught by the Swift 6
+    // job, which is the only thing that compiles these tests in that mode.
+    override func setUp() async throws {
+        try await super.setUp()
         Loupe.start(app: AppInfo(name: "Demo", platform: "macOS"),
                     transport: FileTransport(directory: directory))
     }
