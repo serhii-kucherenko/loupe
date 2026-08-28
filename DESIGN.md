@@ -27,7 +27,8 @@ Semantic names, not literal ones. Light and dark are both first-class.
 | `loupe.ink.soft` | `#4C5A52` | `#A2B2A8` | secondary text, captions |
 | `loupe.line` | `#D6DED8` | `#293830` | hairlines, panel borders |
 | `loupe.action` | `#2F7D5B` | `#62C68E` | Send button, confirmation |
-| `loupe.scrim` | `#17211C` @ 8% | `#000000` @ 24% | dimming behind any panel, and behind the whole screen while picking |
+| `loupe.scrim` | `#17211C` @ 8% | `#000000` @ 24% | behind the whole screen while picking, where the app must stay readable |
+| `loupe.scrim.modal` | `#17211C` @ 32% | `#000000` @ 48% | behind a panel that must be answered before anything else |
 
 Tags reuse the palette rather than adding colours: `bug` uses `loupe.highlight`,
 `polish` and `idea` use `loupe.ink.soft`, `question` uses `loupe.action`.
@@ -41,6 +42,7 @@ System faces only. The overlay must not ship fonts or clash with the host app.
 | `type.body` | `.body` | comment text |
 | `type.label` | `.subheadline` semibold | panel titles, buttons |
 | `type.caption` | `.caption` monospaced | endpoints, counts, element names |
+| `type.note` | `.caption` | field labels, hints, status lines |
 
 ## Spacing and shape
 

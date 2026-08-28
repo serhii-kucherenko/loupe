@@ -52,10 +52,15 @@ public struct LinearSettingsSheet: View {
             Divider().overlay(LoupeTheme.Colors.line.color)
 
             if let oauth {
+                // Full width, because it is the recommended path and a button that
+                // hugs its label reads as one option among several rather than as
+                // the one to take.
                 signIn(with: oauth)
+                    .frame(maxWidth: .infinity)
                 Text("or paste a key")
-                    .font(LoupeTheme.Typography.caption)
+                    .font(LoupeTheme.Typography.note)
                     .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
 
             credentialField
@@ -94,7 +99,7 @@ public struct LinearSettingsSheet: View {
     private var credentialField: some View {
         VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
             Text("Personal API key")
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
             // Secure, because it is over someone's shoulder on an iPad.
             SecureField("lin_api_\u{2026}", text: $key)
@@ -107,7 +112,7 @@ public struct LinearSettingsSheet: View {
                                       lineWidth: LoupeTheme.Stroke.hairline))
                 .accessibilityLabel("Linear personal API key")
             Text("linear.app \u{2192} Settings \u{2192} API \u{2192} Personal API keys")
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
         }
     }
@@ -123,7 +128,7 @@ public struct LinearSettingsSheet: View {
                     key = ""
                     await testSaved(credential)
                 } catch {
-                    connection = .failed(String(describing: error))
+                    connection = .failed(Self.readable(error))
                 }
             }
         }
@@ -133,6 +138,16 @@ public struct LinearSettingsSheet: View {
     #else
     private func signIn(with oauth: LinearOAuth) -> some View { EmptyView() }
     #endif
+
+    /// What to show someone when it did not work.
+    ///
+    /// `String(describing:)` alone is right only when the error happens to be a
+    /// `LinearError`, which carries its own sentence. Anything else - a dropped
+    /// connection, a bad host - dumps a struct into a panel the person has to act on.
+    static func readable(_ error: Error) -> String {
+        if let linear = error as? LinearError { return linear.description }
+        return (error as NSError).localizedDescription
+    }
 
     /// After signing in there is no key in the field to test with, so the saved
     /// credential is what gets checked.
@@ -144,7 +159,7 @@ public struct LinearSettingsSheet: View {
             if teamID.isEmpty { teamID = teams.first?.id ?? "" }
             connection = .connected("\(who.name) in \(who.organisation)")
         } catch {
-            connection = .failed(String(describing: error))
+            connection = .failed(Self.readable(error))
         }
     }
 
@@ -155,17 +170,17 @@ public struct LinearSettingsSheet: View {
             EmptyView()
         case .testing:
             Text("Checking\u{2026}")
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
         case .connected(let who):
             // Who and where, not just "connected": the common mistake is a key for
             // the wrong workspace, and "connected" would hide it.
             Text("Connected as \(who)")
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.action.color)
         case .failed(let why):
             Text(why)
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.highlight.color)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -190,7 +205,7 @@ public struct LinearSettingsSheet: View {
                         options: [(String, String)]) -> some View {
         VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
             Text(title)
-                .font(LoupeTheme.Typography.caption)
+                .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
             Picker(title, selection: selection) {
                 ForEach(options, id: \.0) { Text($0.1).tag($0.0) }
@@ -224,7 +239,7 @@ public struct LinearSettingsSheet: View {
         } catch {
             teams = []
             projects = []
-            connection = .failed(String(describing: error))
+            connection = .failed(Self.readable(error))
         }
     }
 

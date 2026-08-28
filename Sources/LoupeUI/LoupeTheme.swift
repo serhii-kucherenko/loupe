@@ -120,9 +120,22 @@ public extension LoupeTheme {
         /// Send button, confirmation.
         public static let action = ColorToken(light: RGBA(hex: 0x2F7D5B),
                                               dark: RGBA(hex: 0x62C68E))
-        /// Dimming behind the tray.
+        /// Dimming behind the tray, and over the whole screen while picking.
+        ///
+        /// Deliberately barely there: while picking, the app underneath is the thing
+        /// being read, and anything heavier would make it hard to see what you are
+        /// pointing at.
         public static let scrim = ColorToken(light: RGBA(hex: 0x17211C, alpha: 0.08),
                                              dark: RGBA(hex: 0x000000, alpha: 0.24))
+
+        /// Behind a panel that has to be answered before anything else.
+        ///
+        /// A separate token because the two jobs pull in opposite directions and one
+        /// value cannot do both. At 8% a settings panel left the tray behind it at
+        /// full strength, so three primary buttons competed on one screen and none of
+        /// them read as the thing to press.
+        public static let scrimModal = ColorToken(light: RGBA(hex: 0x17211C, alpha: 0.32),
+                                                  dark: RGBA(hex: 0x000000, alpha: 0.48))
 
         /// What a translucent surface actually sits on. Only used to check contrast.
         public static let backdrop = ColorToken(light: RGBA(hex: 0xFFFFFF),
@@ -148,8 +161,14 @@ public extension LoupeTheme {
         public static let body = Font.body
         /// Panel titles, buttons.
         public static let label = Font.subheadline.weight(.semibold)
-        /// Endpoints, counts, element names.
+        /// Endpoints, counts, element names. Monospaced because it is machine text
+        /// and the eye should be able to tell it from a sentence at a glance.
         public static let caption = Font.caption.monospaced()
+        /// Small prose: field labels, hints, status lines. The same size as
+        /// `caption` and deliberately not monospaced - a settings panel written in
+        /// a code face reads as output rather than as something to fill in, and it
+        /// wraps far worse in a narrow column.
+        public static let note = Font.caption
     }
 }
 

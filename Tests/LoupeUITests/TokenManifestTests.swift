@@ -46,6 +46,7 @@ final class TokenManifestTests: XCTestCase {
             "line": LoupeTheme.Colors.line,
             "action": LoupeTheme.Colors.action,
             "scrim": LoupeTheme.Colors.scrim,
+            "scrim.modal": LoupeTheme.Colors.scrimModal,
         ]
 
         XCTAssertEqual(Set(tokens.keys), Set(m.color.keys),

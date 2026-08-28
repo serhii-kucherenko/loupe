@@ -54,7 +54,12 @@ public struct OverlayRoot: View {
             // annotate mode is open - but it does appear, because the tray's xmark
             // is gone and a mode you cannot see your way out of is worse than the
             // duplicate control was.
-            if showsControl {
+            //
+            // Not while a panel is open. It sits outside `chrome`, so it would draw
+            // on top of the panel's own scrim - which put three primary buttons on
+            // one screen with nothing to say which was the live one. A modal owns
+            // the screen, and it carries its own way out.
+            if showsControl, model.panel == nil {
                 enterExitControl
                     .padding(LoupeTheme.Space.lg)
                     .padding(.bottom, safeArea.bottom)
@@ -114,7 +119,11 @@ public struct OverlayRoot: View {
                     // Over everything, centred, with the scrim under it: a panel
                     // asking for a credential is the only thing that matters while
                     // it is open.
-                    LoupeTheme.Colors.scrim.color
+                    //
+                    // The heavier of the two scrims. The picking scrim is 8%, which
+                    // is right when the app underneath is what you are reading, and
+                    // far too light to make a modal read as a modal.
+                    LoupeTheme.Colors.scrimModal.color
                         .ignoresSafeArea()
                         .onTapGesture { model.dismissPanel() }
                     panel

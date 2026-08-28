@@ -50,6 +50,12 @@ export const tokens = {
       "dark": "#000000",
       "lightAlpha": 0.08,
       "darkAlpha": 0.24
+    },
+    "scrim.modal": {
+      "light": "#17211C",
+      "dark": "#000000",
+      "lightAlpha": 0.32,
+      "darkAlpha": 0.48
     }
   },
   "space": {

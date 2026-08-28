@@ -145,10 +145,24 @@ enum DemoLaunch {
 
         // Puts the settings panel behind the tray's gear. Everything Linear in this
         // demo is these two lines.
-        LoupeLinear.enable()
+        LoupeLinear.enable(oauth: demoOAuth)
         Seed.installIfNeeded(app: app, into: FileTransport.defaultDirectory(appName: app.name))
         LogRecorder.shared.info("stub server on \(server.port)", subsystem: "demo")
     }
+
+    /// The OAuth application this demo signs in against.
+    ///
+    /// A client id is a public identifier rather than a credential. It ships in the
+    /// binary of every OAuth mobile app there is, and PKCE is precisely what removes
+    /// the need for a secret alongside it - so there is nothing here to leak. It is
+    /// checked in so the settings panel's "Sign in with Linear" button does something
+    /// when you tap it, instead of being a control that only works on one machine.
+    ///
+    /// The application is not public, so it installs into one workspace only. Your own
+    /// host registers its own at `https://linear.app/settings/api/applications/new`
+    /// and passes its own id here; the redirect is a parameter for that reason.
+    private static let demoOAuth = LinearOAuth(clientID: "6b85019f81641e2fe253c67f42760bfa",
+                                               redirectURI: "loupe://linear")
 
     /// The transport for a run that is testing the offline queue.
     ///
