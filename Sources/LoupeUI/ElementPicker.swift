@@ -29,6 +29,9 @@ public enum ElementPicker {
     /// of the window is a container, not the thing you pointed at.
     static let maxWindowAreaFraction = 0.8
 
+    /// - Parameter point: top-left origin, in viewport points, on **every**
+    ///   platform. AppKit's bottom-left origin is an AppKit detail and is dealt
+    ///   with in here, not by every caller.
     @MainActor
     public static func pick(at point: CGPoint, in window: PlatformWindow) -> (view: PlatformView, ref: ElementRef)? {
         guard let hit = hitTest(point, in: window) else { return nil }
@@ -58,6 +61,11 @@ public enum ElementPicker {
         #if canImport(UIKit)
         if view is UIControl { return true }
         #elseif canImport(AppKit)
+        // AppKit has no separate label class: a static label is an NSTextField,
+        // which is an NSControl. Taking every NSControl as interactive therefore
+        // stops the climb on the very label the walk exists to climb past, and
+        // the crop shows the words instead of the thing they are inside.
+        if let field = view as? NSTextField { return field.isEditable }
         if view is NSControl { return true }
         #endif
         return false
@@ -106,8 +114,10 @@ public enum ElementPicker {
         return window.hitTest(point, with: nil)
         #elseif canImport(AppKit)
         // NSView.hitTest takes a point in the receiver's superview coordinates,
-        // which for the content view means window coordinates.
-        return window.contentView?.hitTest(point)
+        // which for the content view means window coordinates - and those are
+        // bottom-left, while everything else in Loupe is top-left.
+        guard let content = window.contentView else { return nil }
+        return content.hitTest(CGPoint(x: point.x, y: content.bounds.height - point.y))
         #endif
     }
 
@@ -132,12 +142,23 @@ public enum ElementPicker {
         )
     }
 
+    /// Always top-left origin, on every platform.
+    ///
+    /// AppKit windows are bottom-left, so a raw `convert` here would put macOS
+    /// bounds in a different coordinate space from iOS ones. The bundle format
+    /// promises one space (`docs/bundle-format.md`), and the overlay draws in the
+    /// top-left one, so the flip happens here rather than at every reader.
     @MainActor
     private static func boundsInWindow(_ view: PlatformView, _ window: PlatformWindow) -> CGRect {
         #if canImport(UIKit)
         return view.convert(view.bounds, to: window)
         #elseif canImport(AppKit)
-        return view.convert(view.bounds, to: nil)
+        let inWindow = view.convert(view.bounds, to: nil)
+        let height = window.contentView?.bounds.height ?? inWindow.maxY
+        return CGRect(x: inWindow.origin.x,
+                      y: height - inWindow.maxY,
+                      width: inWindow.width,
+                      height: inWindow.height)
         #endif
     }
 
