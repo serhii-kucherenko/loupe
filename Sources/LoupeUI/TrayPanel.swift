@@ -75,17 +75,44 @@ struct TrayPanel: View {
                    value: model.annotations.count)
     }
 
+    /// Everything that is not the pull lives in here.
+    ///
+    /// The drawer is the single home for Loupe's chrome. There used to be three
+    /// answers to "where does it live" - a pill in one corner, an xmark on the tray
+    /// in another, a gear inside the tray - and two occlusion bugs came out of
+    /// that. Now one object stands on the app, and it moves.
     private var header: some View {
         HStack(spacing: LoupeTheme.Space.sm) {
             Text(model.annotations.count == 1 ? "1 note" : "\(model.annotations.count) notes")
                 .font(LoupeTheme.Typography.label)
                 .foregroundStyle(LoupeTheme.Colors.ink.color)
             Spacer()
-            Button("Pick another") { model.resumePicking() }
-                .buttonStyle(LoupeButtonStyle(kind: .quiet))
-                .disabled(model.mode != .browsing)
+
+            if let onSettings = model.onSettings {
+                Button(action: onSettings) { Image(systemName: "gearshape") }
+                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
+                    .accessibilityLabel("Where notes are sent")
+            }
+
+            // Secondary, not primary. Send is the important button in this panel and
+            // two primaries in one panel means neither reads as the thing to press.
+            Button {
+                model.endAnnotating()
+            } label: {
+                Label("Done", systemImage: "checkmark")
+            }
+            .buttonStyle(LoupeButtonStyle(kind: .secondary))
+            .accessibilityLabel(exitLabel)
         }
         .padding(LoupeTheme.Space.md)
+    }
+
+    private var exitLabel: String {
+        switch model.annotations.count {
+        case 0: return "Finish annotating"
+        case 1: return "Finish annotating, 1 note"
+        case let n: return "Finish annotating, \(n) notes"
+        }
     }
 
 
@@ -112,6 +139,10 @@ struct TrayPanel: View {
                     .foregroundStyle(LoupeTheme.Colors.highlight.color)
                     .accessibilityLabel("Send failed: \(why)")
             }
+
+            Button("Pick another") { model.resumePicking() }
+                .buttonStyle(LoupeButtonStyle(kind: .quiet))
+                .disabled(model.mode != .browsing)
 
             Button {
                 Task { await model.send() }

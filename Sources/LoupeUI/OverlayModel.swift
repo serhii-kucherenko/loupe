@@ -34,6 +34,21 @@ public final class OverlayModel: ObservableObject {
     @Published public var draftComment = ""
     @Published public var draftTag: AnnotationTag?
 
+    /// Whether the full tray is open.
+    ///
+    /// Collapsed by default and stays collapsed until somebody asks for it - in
+    /// `.browsing` too, which is the part that matters. Saving a note used to pop the
+    /// whole panel open, and "the sidebar appears only when I add an annotation" was
+    /// reported four times. Presence never changes for the whole session now; only
+    /// the count on the tab moves.
+    @Published public private(set) var trayExpanded = false
+
+    /// Where the drawer's pull sits on the trailing edge, for the rest of the process.
+    ///
+    /// Someone who moved it off the thing they were trying to annotate should not
+    /// have to move it again on the next pick.
+    @Published public private(set) var handle = DrawerHandle()
+
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
 
@@ -78,10 +93,12 @@ public final class OverlayModel: ObservableObject {
 
     public func beginAnnotating() {
         guard mode == .off else { return }
+        trayExpanded = false
         set(.picking(hover: nil))
     }
 
     public func endAnnotating() {
+        trayExpanded = false
         set(.off)
     }
 
@@ -193,6 +210,13 @@ public final class OverlayModel: ObservableObject {
     }
 
     // MARK: - Tray
+
+    public func toggleTray() { trayExpanded.toggle() }
+
+    public func setTrayExpanded(_ expanded: Bool) { trayExpanded = expanded }
+
+    /// Slides the pull along the edge, out of the way of whatever is under it.
+    public func moveHandle(toFraction fraction: Double) { handle.move(to: fraction) }
 
     public func remove(id: UUID) {
         session.remove(id: id)

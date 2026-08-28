@@ -9,6 +9,9 @@ import LoupeCore
 public struct OverlayRoot: View {
     @ObservedObject var model: OverlayModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Where the controls are right now, mid-drag. Reset on release, when the corner
+    /// takes over - so nothing has to be persisted in points.
+    @State private var dragOffset: CGSize = .zero
 
     #if canImport(UIKit)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -44,26 +47,31 @@ public struct OverlayRoot: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            chrome.opacity(model.mode.isVisible ? 1 : 0)
+        GeometryReader { geometry in
+            ZStack {
+                chrome.opacity(model.mode.isVisible ? 1 : 0)
 
-            // Outside the opacity gate on purpose: in `.off` the overlay draws
-            // nothing, and the way in has to still be there.
-            //
-            // On a Mac the way in is the hotkey, so the control appears only once
-            // annotate mode is open - but it does appear, because the tray's xmark
-            // is gone and a mode you cannot see your way out of is worse than the
-            // duplicate control was.
-            //
-            // Not while a panel is open. It sits outside `chrome`, so it would draw
-            // on top of the panel's own scrim - which put three primary buttons on
-            // one screen with nothing to say which was the live one. A modal owns
-            // the screen, and it carries its own way out.
-            if showsControl, model.panel == nil {
-                controls
-                    .padding(LoupeTheme.Space.lg)
-                    .padding(.bottom, safeArea.bottom)
-                    .padding(.trailing, safeArea.trailing)
+                // Outside the opacity gate on purpose: in `.off` the overlay draws
+                // nothing, and the way in has to still be there.
+                //
+                // Not while a panel is open. It sits outside `chrome`, so it would
+                // draw on top of the panel's own scrim - which put three primary
+                // buttons on one screen with nothing to say which was the live one.
+                // A modal owns the screen and carries its own way out.
+                if model.panel == nil {
+                    if model.mode == .off {
+                        if showsControl {
+                            enterControl
+                                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                                       alignment: .bottomTrailing)
+                                .padding(LoupeTheme.Space.lg)
+                                .padding(.bottom, safeArea.bottom)
+                                .padding(.trailing, safeArea.trailing)
+                        }
+                    } else {
+                        pull(in: geometry.size)
+                    }
+                }
             }
         }
     }
@@ -72,8 +80,122 @@ public struct OverlayRoot: View {
         #if canImport(UIKit)
         return true
         #else
-        return model.mode != .off
+        // On a Mac the way in is the hotkey. The pull still appears once annotate
+        // mode is open, because a mode you cannot see your way out of is worse than
+        // one more thing on screen.
+        return true
         #endif
+    }
+
+    /// The way in, and nothing else. One pill over somebody's app at rest.
+    private var enterControl: some View {
+        Button { model.toggleAnnotating() } label: {
+            Label("Annotate", systemImage: "scope")
+        }
+        .buttonStyle(LoupeButtonStyle(kind: .primary))
+        .loupePanel()
+        .accessibilityLabel("Start annotating")
+        // Small, and the only way in - so it must never be one of the touches the
+        // overlay passes through. See `InteractiveRegions.swift`.
+        .loupeInteractive()
+    }
+
+    /// The drawer's pull: the only thing Loupe leaves on the app while annotating.
+    ///
+    /// Asked for in these words: "ideally, you make it a sliding panel, when it only
+    /// leaves a handler I click on and the side panel with appear / also that handler
+    /// should be draggeble as sometimes I might need to move it as it might be
+    /// blocking element I need to annotate".
+    ///
+    /// Two gestures on one object, and neither needs a long press. Dragging **along**
+    /// the edge slides the pull clear of whatever is under it. Dragging **away** from
+    /// the edge opens the drawer, which is the gesture the shape already suggests. A
+    /// tap does the same as the second, for anyone who tries neither.
+    @ViewBuilder
+    private func pull(in size: CGSize) -> some View {
+        let height = size.height
+        Button { model.toggleTray() } label: {
+            VStack(spacing: LoupeTheme.Space.xs) {
+                Image(systemName: model.trayExpanded ? "chevron.right" : "chevron.left")
+                Text("\(model.annotations.count)")
+                    .font(LoupeTheme.Typography.label)
+                    .monospacedDigit()
+            }
+            .padding(.vertical, LoupeTheme.Space.sm)
+        }
+        .buttonStyle(LoupeButtonStyle(kind: .secondary))
+        .loupePanel()
+        .accessibilityLabel(pullAccessibilityLabel)
+        .accessibilityHint("Slides the notes panel in and out")
+        .loupeInteractive()
+        .position(x: pullX(in: size), y: pullY(in: size))
+        .gesture(
+            // Has to travel before it counts, or a tap on the pull would be read as
+            // the beginning of a move.
+            DragGesture(minimumDistance: LoupeTheme.Space.md)
+                .onChanged { dragOffset = $0.translation }
+                .onEnded { value in
+                    dragOffset = .zero
+                    // Away from the trailing edge means open. It is the direction the
+                    // drawer would travel, so it is the one the pull should answer to.
+                    if value.translation.width < -openThreshold,
+                       abs(value.translation.width) > abs(value.translation.height) {
+                        model.setTrayExpanded(true)
+                    } else if value.translation.width > openThreshold,
+                              abs(value.translation.width) > abs(value.translation.height) {
+                        model.setTrayExpanded(false)
+                    } else {
+                        model.moveHandle(toFraction: DrawerHandle.fraction(
+                            forY: model.handle.centreY(in: height) + value.translation.height,
+                            in: height))
+                    }
+                }
+        )
+        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
+                                              reduceMotion: reduceMotion),
+                   value: model.handle)
+        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
+                                              reduceMotion: reduceMotion),
+                   value: model.trayExpanded)
+    }
+
+    /// Where the pull sits horizontally: against the screen's edge when the drawer is
+    /// shut, and against the drawer's own edge when it is open.
+    ///
+    /// Travelling with the drawer is what makes it a pull rather than a button that
+    /// happens to show a panel. Left where it was, it floated in the middle of the
+    /// screen with the drawer somewhere behind it, attached to nothing.
+    ///
+    /// A phone is the exception: the tray is a bottom sheet there, so the trailing
+    /// edge stays free and the pull does not move.
+    private func pullX(in size: CGSize) -> CGFloat {
+        let half = LoupeTheme.Hit.touch / 2
+        let shut = size.width - safeArea.trailing - LoupeTheme.Space.sm - half
+        guard model.trayExpanded, !isCompact else { return shut }
+        let drawerLeading = size.width - safeArea.trailing - LoupeTheme.Space.lg - TrayPanel.width
+        return drawerLeading - half - LoupeTheme.Space.xs
+    }
+
+    /// Where the pull sits vertically: wherever it was put, except that on a phone
+    /// the drawer is a bottom sheet, and the pull has to stay above it rather than
+    /// straddling its top corner.
+    private func pullY(in size: CGSize) -> CGFloat {
+        let wanted = model.handle.centreY(in: size.height) + dragOffset.height
+        guard model.trayExpanded, isCompact else { return wanted }
+        let sheetTop = size.height - sheetHeight(in: size)
+        return min(wanted, sheetTop - LoupeTheme.Hit.touch / 2 - LoupeTheme.Space.sm)
+    }
+
+    /// Half the screen, which is what the sheet gets in `trayPanel`.
+    private func sheetHeight(in size: CGSize) -> CGFloat { size.height * 0.5 }
+
+    /// Far enough that a wobble while sliding the pull up the edge is not read as
+    /// "open", and near enough that a deliberate flick is.
+    private var openThreshold: CGFloat { LoupeTheme.Hit.touch }
+
+    private var pullAccessibilityLabel: String {
+        let notes = model.annotations.count == 1 ? "1 note" : "\(model.annotations.count) notes"
+        return model.trayExpanded ? "Hide notes, \(notes)" : "Show notes, \(notes)"
     }
 
     private var chrome: some View {
@@ -137,65 +259,6 @@ public struct OverlayRoot: View {
         }
     }
 
-    /// The overlay's own corner: settings, and the way in and out.
-    ///
-    /// The gear used to live in the tray. The tray only exists in `.browsing`, and
-    /// the only way into `.browsing` is to save a note - so on a fresh install the
-    /// step that configures where notes are sent sat behind the step that sends
-    /// them, and there was no way to reach it at all. Reported by someone who could
-    /// not find it: "annotate sidepanel isn't visible when I enter annotate mode,
-    /// also unclear how to make it visible".
-    ///
-    /// Not in `.off`: the resting state over somebody's app is one pill, and nobody
-    /// needs to configure delivery before they have decided to annotate anything.
-    @ViewBuilder
-    private var controls: some View {
-        HStack(spacing: LoupeTheme.Space.sm) {
-            if let onSettings = model.onSettings, model.mode != .off {
-                Button(action: onSettings) { Image(systemName: "gearshape") }
-                    .buttonStyle(LoupeButtonStyle(kind: .secondary))
-                    .loupePanel()
-                    .accessibilityLabel("Where notes are sent")
-                    .loupeInteractive()
-            }
-            enterExitControl
-        }
-    }
-
-    /// One control, in one place, that means "annotate mode" both ways.
-    ///
-    /// It used to be two objects in two corners: a pill bottom-trailing to get in,
-    /// an xmark on the tray top-trailing to get out. Nothing said the second was the
-    /// way out of the first, and the pill vanished the moment you were in. Someone
-    /// who found their way in can now leave by looking where they came from.
-    @ViewBuilder
-    private var enterExitControl: some View {
-        let isOff = model.mode == .off
-        Button {
-            model.toggleAnnotating()
-        } label: {
-            Label(isOff ? "Annotate" : exitTitle, systemImage: isOff ? "scope" : "checkmark")
-        }
-        .buttonStyle(LoupeButtonStyle(kind: .primary))
-        .loupePanel()
-        .accessibilityLabel(isOff ? "Start annotating" : exitAccessibilityLabel)
-        // Small, and the only way out - so it must never be one of the touches the
-        // overlay passes through. See `InteractiveRegions.swift`.
-        .loupeInteractive()
-    }
-
-    private var exitTitle: String {
-        model.annotations.isEmpty ? "Done" : "Done · \(model.annotations.count)"
-    }
-
-    private var exitAccessibilityLabel: String {
-        switch model.annotations.count {
-        case 0: return "Finish annotating"
-        case 1: return "Finish annotating, 1 note"
-        case let n: return "Finish annotating, \(n) notes"
-        }
-    }
-
     @ViewBuilder
     private var highlight: some View {
         // A shape being drawn is drawn, whatever mode is underneath it. It used to
@@ -224,13 +287,19 @@ public struct OverlayRoot: View {
 
     @ViewBuilder
     private func tray(in size: CGSize, insets: EdgeInsets) -> some View {
-        // No tray at all while picking or commenting. The one-line bar that used to
-        // sit here was not merely visually in the way: once it registered an
-        // interactive region it *took* every touch that landed on it, so anything
-        // underneath became unpickable - the exact thing this file's own comment
-        // said must never happen. Reported by someone who could not annotate the
-        // trailing edge of his own app.
-        if case .browsing = model.mode {
+        // Only when it has been asked for, and then in any annotating mode.
+        //
+        // It used to render itself in `.browsing` and nowhere else, which meant it
+        // appeared the instant a note was saved and could not be reached before
+        // that. Both halves were wrong: the layout changed under someone's hands at
+        // the moment they were least expecting it, and the tray was unreachable for
+        // the whole of a first session.
+        //
+        // It still must not be in the way when nobody asked for it - once it
+        // registers an interactive region it *takes* every touch that lands on it,
+        // so anything underneath becomes unpickable. That is the difference between
+        // this and the one-line bar that used to sit here: this one is opened.
+        if model.trayExpanded, model.mode != .off {
             trayPanel(in: size, insets: insets)
         }
     }
@@ -245,24 +314,24 @@ public struct OverlayRoot: View {
         if isCompact {
             VStack(spacing: 0) {
                 Spacer()
-                panel.frame(maxHeight: size.height * 0.5)
+                panel.frame(maxHeight: sheetHeight(in: size))
             }
             // Pushed down by one corner radius so the sheet's lower corners fall off
             // the screen and it reads as hugging the edge rather than floating.
             .padding(.bottom, -LoupeTheme.Radius.panel)
             .transition(.move(edge: .bottom))
         } else {
-            // Top of the trailing edge, not the middle of it. The tray grows
-            // downward as notes land, and a panel that floats in the vertical
-            // centre reads as a dialog rather than as a docked tool.
-            HStack(alignment: .top) {
+            // The full height of the trailing edge, because it is a drawer and the
+            // pull rides on its leading edge. A panel sized to its contents left the
+            // pull attached to nothing whenever the two disagreed about where that
+            // edge was, which was most of the time.
+            HStack {
                 Spacer()
-                panel.frame(maxHeight: size.height - LoupeTheme.Space.xxl)
-                    .fixedSize(horizontal: false, vertical: true)
+                panel.frame(maxHeight: .infinity)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
             .padding(LoupeTheme.Space.lg)
             .padding(.top, insets.top)
+            .padding(.bottom, insets.bottom)
             .padding(.trailing, insets.trailing)
             .transition(.move(edge: .trailing))
         }

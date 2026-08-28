@@ -190,6 +190,17 @@ enum DemoScene {
                     report(at: basket, in: window, label: "basket")
                     pick(at: basket, in: window, model: model)
                     model.saveComment("the empty basket gives you nowhere to go", tag: .bug)
+                    // Asked for, because the tray no longer opens itself. That is
+                    // the whole of SER-693: saving a note used to change the layout
+                    // underneath somebody at the moment they were least expecting it.
+                    model.setTrayExpanded(true)
+                }
+
+                // The tray opened with nothing in it, which is how somebody reaches
+                // Send and the note list on a first run.
+                if scene == "emptytray" {
+                    model.beginAnnotating()
+                    model.setTrayExpanded(true)
                 }
             }
         }
