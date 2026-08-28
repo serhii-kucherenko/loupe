@@ -23,7 +23,7 @@ jobs:
         working-directory: web
 
   npm:
-    name: Publish @loupe/web
+    name: Publish loupe-web
     needs: verify
     runs-on: ubuntu-latest
     defaults:
@@ -41,7 +41,7 @@ jobs:
             echo "have=yes" >> "$GITHUB_OUTPUT"
           else
             echo "have=no" >> "$GITHUB_OUTPUT"
-            echo "::notice::No NPM_TOKEN secret, so the npm package was not published. The git tag is the Swift release and is unaffected. See SER-652."
+            echo "::notice::No NPM_TOKEN secret, so loupe-web was not published. The git tag is the Swift release and is unaffected. See SER-652."
           fi
 
       - uses: actions/setup-node@v4
