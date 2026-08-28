@@ -170,11 +170,12 @@ final class LoupeEntryPointTests: XCTestCase {
     private let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString)
 
-    // `async` on purpose: a plain `setUp()` is nonisolated even inside a
-    // `@MainActor` class, so it cannot call `Loupe.start`. Caught by the Swift 6
-    // job, which is the only thing that compiles these tests in that mode.
-    override func setUp() async throws {
-        try await super.setUp()
+    // Not `setUp`. A plain `setUp()` is nonisolated even inside a `@MainActor`
+    // class so it cannot call `Loupe.start`, and the async overload then sends a
+    // non-Sendable `XCTestCase` across isolation. Both are errors in Swift 6 mode
+    // and neither shows up in a normal `swift test`, which is what that CI job is
+    // for. A plain function called from each test sidesteps the whole argument.
+    private func startLoupe() {
         Loupe.start(app: AppInfo(name: "Demo", platform: "macOS"),
                     transport: FileTransport(directory: directory))
     }
@@ -185,6 +186,7 @@ final class LoupeEntryPointTests: XCTestCase {
     }
 
     func testShakeOpensAnnotateModeAndShakingAgainLeaves() {
+        startLoupe()
         XCTAssertEqual(Loupe.model?.mode, .off)
 
         Loupe.handleShake()
@@ -195,6 +197,7 @@ final class LoupeEntryPointTests: XCTestCase {
     }
 
     func testBeginAndEndAreNotAToggle() {
+        startLoupe()
         Loupe.beginAnnotating()
         Loupe.beginAnnotating()
         XCTAssertEqual(Loupe.model?.mode, .picking(hover: nil), "begin twice still means begin")
