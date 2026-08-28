@@ -6,12 +6,17 @@ It is not a task list. See `AGENTS.md`.
 
 ## Where the product stands
 
-Written and tested: the annotation model, the tray (`AnnotationSession`), the network ring
-buffer, both transports, and the element picker. 745 lines, 8 tests, CI green on macOS and iOS.
+**Built, 2026-08-28.** Everything below shipped in one cycle: the overlay on macOS and iOS,
+the tray, the theme, the offline queue, log capture, the bundle format, the context shot, a
+seeded two-role demo per platform, and a second SDK in TypeScript for the browser and
+Electron. 83 Swift tests on macOS, 44 on the iOS Simulator, 39 on the web. CI green on all
+three.
 
-Not written: **all of the UI**. There is no way for a person to point at anything. `Loupe.capture`
-takes a `CGPoint` the host app has to supply itself, which means today Loupe is a library with no
-product on top of it.
+Still open: an iPad demo target and a run on real hardware (SER-651), and the first release
+(SER-652, blocked on an npm org).
+
+This file is kept as the *why*: the decisions below are what the code did, and the
+retrospective at the bottom records where they were wrong.
 
 ## Decisions
 
@@ -24,10 +29,13 @@ Decided from the code and from `DESIGN.md`, without an interview.
 | 3 | Does the overlay swallow the host app's input? | Only while *picking*. After a comment is committed it drops to *browsing* and passes clicks through | You have to be able to navigate the app to annotate a second screen. `AnnotationSession` already assumes the tray outlives navigation. |
 | 4 | Log capture - in or out? | In. A `LogRecorder` ring buffer shaped exactly like `NetworkRecorder`, fed by a public append API | The README already promises "the errors" in a bundle. Intercepting `os_log` or `stderr` is invasive and fragile; a one-line call from the host's own logger costs us nothing. |
 | 5 | Offline queue - in or out? | In, as a `QueuedTransport` decorator that persists first and drains after | `HTTPTransport` throwing is survivable today only because the tray keeps the annotations. Killing the app loses them. |
-| 6 | Web SDK - in or out? | Out of this cycle | A second implementation in another language. Finishing Apple platforms beats half-finishing both. Next phase. |
-| 7 | Full-screen context shot beside the tight crop? | Out, for now | There is an existing `ponytail:` deferral on this and still no evidence the agent needs it. The Agent role in the demo is what will produce that evidence. |
+| 6 | Web SDK - in or out? | ~~Out of this cycle~~ **In** | Overruled by Serhii mid-session: *"we're global tool, not just one system, but multiple, ipad, iphone, web, etc."* Shipped as `web/`, sharing the bundle format and `docs/tokens.json`. |
+| 7 | Full-screen context shot beside the tight crop? | ~~Out~~ **In** | Building the Agent inbox produced the evidence immediately: a crop alone cannot answer a layout complaint. Shipped as `contextPNG`, Apple-only. |
 | 8 | One demo app or two? | One app, two roles | The MVP bar wants a multi-role click-through. Two binaries would double the seams for no gain. |
 | 9 | Tag picker shape? | Four chips | `DESIGN.md` already reserves `radius.control` for "buttons, tag chips". |
+| 10 | Where does the full tray live? | Browsing only; a one-line bar while picking | It covered part of the app, and **anything under it could not be pointed at**. Found by running the web demo, fixed on both platforms. |
+| 11 | Shake to annotate on iOS? | No - a floating pill | A shake read from a pass-through window above the app is unreliable. `Loupe.handleShake()` is exposed for a host that wants to wire it from its own responder. |
+| 12 | How are the overlay's looks checked? | Rendered offscreen from a real `NSWindow`, committed to `docs/screenshots/` | A design system only checkable by launching an app stops being checked. `ImageRenderer` was tried first and is the wrong tool: it will not draw a live `TextField`. |
 
 ## The two roles
 
@@ -104,3 +112,24 @@ Tests/LoupeUITests/         NEW     theme tokens, mode machine
   `#if os(macOS)` split.
 - The picker's meaningful-ancestor walk is the correctness core. A wrong crop makes every
   downstream step reason about the wrong element. Changes there need a test.
+
+
+## What actually went wrong
+
+Six bugs, every one of them found by running the thing rather than reading it. They are
+listed because each is a place where the obvious code was wrong in a way review would not
+have caught.
+
+| Where | What | Why it mattered |
+|---|---|---|
+| `ElementPicker.isMeaningful` | In AppKit a static label is an `NSTextField`, which is an `NSControl`. Treating every `NSControl` as interactive stopped the climb on the label. | The crop would have shown the words instead of the card they sit in - the exact failure the walk exists to prevent. |
+| `ElementPicker.boundsInWindow` | Bounds came back bottom-left on macOS and top-left everywhere else. | The bundle format promises one space. Every consumer would have had to know which OS wrote the bundle. |
+| `OverlayHost` (iOS) | A force-cast of a metatype when the host window had no scene. | A crash, shipped. |
+| `picker.labelOf`, `Overlay.isOurs` | `instanceof` on DOM types is false for an element inside an iframe: it is from another realm. | Silent wrong answers on any page with an embedded preview. |
+| `Overlay.pickAt` | `elementFromPoint` retargets shadow content to its host, which is not meaningful, so the climb walked out of the overlay and returned `<html>`. | The crop was a picture of the entire page. |
+| `TrayPanel` | The tray covered part of the app, and nothing under it could be picked. | The one thing the tool must never take away. Only visible once there was something under the tray worth annotating. |
+
+The pattern is worth naming: **five of the six were in the seams between correct pieces**,
+and none of them would have shown up in a unit test written against the piece alone. The
+demo, the snapshots and the headless browser run are what found them, which is the argument
+for the MVP bar being a click-through rather than a library.
