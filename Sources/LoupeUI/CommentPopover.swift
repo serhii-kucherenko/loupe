@@ -95,6 +95,10 @@ struct CommentPopover: View {
         .loupePanel()
         .transition(.opacity)
         .onAppear { fieldFocused = true }
+        // `.contain`, not a bare label: a label on the container is pushed down onto
+        // every child, so the field, the four tag chips, Cancel and Save all reported
+        // the same sentence and VoiceOver could not tell Save from Cancel.
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Comment on \(pick.ref.label ?? pick.ref.className ?? "the picked element")")
     }
 

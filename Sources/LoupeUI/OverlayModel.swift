@@ -14,6 +14,12 @@ import SwiftUI
 public final class OverlayModel: ObservableObject {
 
     @Published public private(set) var mode: OverlayMode = .off
+
+    /// Frames of the overlay's own controls, in window coordinates, reported by the
+    /// views themselves. Deliberately not `@Published`: the window reads it during
+    /// hit-testing, and republishing it would loop with the layout that produces it.
+    /// See `InteractiveRegions.swift`.
+    public var interactiveRegions: [CGRect] = []
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
 

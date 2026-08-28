@@ -97,6 +97,7 @@ public struct OverlayRoot: View {
                               sheet: isCompact,
                               safeBottom: insets.bottom,
                               onClose: { model.endAnnotating() })
+            .loupeInteractive()
 
         if isCompact {
             VStack(spacing: 0) {
