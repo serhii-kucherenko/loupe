@@ -1,7 +1,16 @@
 import SwiftUI
 import LoupeCore
 
-#if canImport(AppKit)
+// `os(macOS)`, not `canImport(AppKit)`.
+//
+// Under Mac Catalyst **both** are importable, so a standalone `canImport(AppKit)`
+// block compiles alongside the UIKit one - two `OverlayHost` declarations - and then
+// fails anyway, because NSPanel and NSWindow are unavailable there. Catalyst is an
+// iOS app wearing a Mac coat, so it takes the UIKit path.
+//
+// Elsewhere in LoupeUI the same choice is made by putting `canImport(UIKit)` first
+// and AppKit in an `#elseif`, which is safe for the same reason: UIKit wins.
+#if os(macOS)
 import AppKit
 
 /// Puts the overlay above a host window without becoming part of it.

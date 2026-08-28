@@ -46,7 +46,9 @@ public enum Loupe {
     @discardableResult
     public static func attach(to window: PlatformWindow) -> Bool {
         guard let model else { return false }
-        #if canImport(AppKit)
+        // See OverlayWindow.swift: os(macOS) rather than canImport(AppKit), because
+        // Catalyst can import AppKit and must still take the UIKit path.
+        #if os(macOS)
         host = OverlayHost(model: model, host: window)
         return true
         #else
