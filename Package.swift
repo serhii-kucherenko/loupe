@@ -12,5 +12,6 @@ let package = Package(
         .target(name: "LoupeCore"),
         .target(name: "LoupeUI", dependencies: ["LoupeCore"]),
         .testTarget(name: "LoupeCoreTests", dependencies: ["LoupeCore"]),
+        .testTarget(name: "LoupeUITests", dependencies: ["LoupeUI"]),
     ]
 )

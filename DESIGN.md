@@ -48,6 +48,8 @@ A 4pt base. Only these steps: `4, 8, 12, 16, 24, 32`.
 | `radius.control` | 10 | buttons, tag chips |
 | `radius.highlight` | 6 | the outline around a picked element |
 | `stroke.highlight` | 2pt | the outline itself |
+| `stroke.focus` | 2pt | the keyboard focus ring |
+| `offset.focus` | 2pt | the gap between a control and its focus ring |
 | `elevation.panel` | y8 blur24 @ 18% | floating panels |
 
 ## Motion
@@ -73,4 +75,7 @@ Respect Reduce Motion: replace every transition with a cross-fade at `motion.hov
 
 - The highlight is never the only signal: the picked element also gets a numbered badge.
 - Every overlay control has an accessibility label, and the overlay is reachable by keyboard on macOS.
+- The focus ring reuses `loupe.highlight` rather than adding a colour. It is the one thing
+  already guaranteed to stand out against every surface here, and it clears 3:1 on both themes.
+  It appears instantly: a ring that fades in is a ring you have already stopped looking for.
 - Contrast holds at 4.5:1 for text on `loupe.surface` in both themes.
