@@ -7,32 +7,21 @@ import LoupeUI
 /// It lives here rather than in `LoupeUI` on purpose: a host that wants capture only
 /// takes `LoupeUI` and never compiles a line of Linear. The dependency that matters
 /// is the one that does not exist.
+///
+/// The behaviour is all in `LinearSettingsFlow`, which is a plain object with no view
+/// in it. It used to be in here, where nothing could reach it.
 @MainActor
 public struct LinearSettingsSheet: View {
 
-    /// What the panel is doing, so every one of these has a visible state rather
-    /// than a spinner that means four different things.
-    enum Connection: Equatable {
-        case idle
-        case testing
-        case connected(String)
-        case failed(String)
-    }
-
-    private let settings: LinearSettings
-    private let makeDirectory: (LinearCredential) -> LinearDirectory
+    @StateObject private var flow: LinearSettingsFlow
     private let onClose: () -> Void
     /// Present when the host has registered an OAuth application. Absent is normal:
     /// the API key path needs no setup at all, and asking someone to register an app
     /// before they can try the tool is a worse first five minutes.
     private let oauth: LinearOAuth?
+    private let settings: LinearSettings
 
     @State private var key = ""
-    @State private var connection: Connection = .idle
-    @State private var teams: [LinearDirectory.Team] = []
-    @State private var projects: [LinearDirectory.Project] = []
-    @State private var teamID = ""
-    @State private var projectID = ""
 
     public init(settings: LinearSettings = LinearSettings(),
                 oauth: LinearOAuth? = nil,
@@ -42,8 +31,9 @@ public struct LinearSettingsSheet: View {
                 onClose: @escaping () -> Void) {
         self.settings = settings
         self.oauth = oauth
-        self.makeDirectory = makeDirectory
         self.onClose = onClose
+        _flow = StateObject(wrappedValue: LinearSettingsFlow(settings: settings,
+                                                             makeDirectory: makeDirectory))
     }
 
     public var body: some View {
@@ -66,15 +56,13 @@ public struct LinearSettingsSheet: View {
             credentialField
             status
 
-            if !teams.isEmpty {
-                picker("Team", selection: $teamID,
-                       options: teams.map { ($0.id, "\($0.name) · \($0.key)") })
-                    .onChange(of: teamID) { _ in Task { await loadProjects() } }
+            if !flow.teams.isEmpty {
+                picker("Team", selection: $flow.teamID,
+                       options: flow.teams.map { ($0.id, "\($0.name) · \($0.key)") })
+                    .onChange(of: flow.teamID) { _ in Task { await flow.loadProjects() } }
 
-                if !projects.isEmpty {
-                    picker("Project", selection: $projectID,
-                           options: [("", "None")] + projects.map { ($0.id, $0.name) })
-                }
+                picker("Project", selection: $flow.projectID,
+                       options: [("", "None")] + flow.projects.map { ($0.id, $0.name) })
             }
 
             footer
@@ -82,7 +70,7 @@ public struct LinearSettingsSheet: View {
         .padding(LoupeTheme.Space.md)
         .frame(width: 360)
         .loupePanel()
-        .onAppear(perform: load)
+        .task { await flow.load() }
     }
 
     private var header: some View {
@@ -121,14 +109,13 @@ public struct LinearSettingsSheet: View {
     private func signIn(with oauth: LinearOAuth) -> some View {
         Button("Sign in with Linear") {
             Task {
-                connection = .testing
                 do {
-                    let credential = try await LinearSignIn(oauth: oauth).run()
-                    settings.save(credential)
+                    let signedIn = try await LinearSignIn(oauth: oauth).run()
+                    _ = settings.save(signedIn)
                     key = ""
-                    await testSaved(credential)
+                    await flow.connect(signedIn)
                 } catch {
-                    connection = .failed(Self.readable(error))
+                    await flow.connect(.accessToken(""))
                 }
             }
         }
@@ -139,35 +126,16 @@ public struct LinearSettingsSheet: View {
     private func signIn(with oauth: LinearOAuth) -> some View { EmptyView() }
     #endif
 
-    /// What to show someone when it did not work.
-    ///
-    /// `String(describing:)` alone is right only when the error happens to be a
-    /// `LinearError`, which carries its own sentence. Anything else - a dropped
-    /// connection, a bad host - dumps a struct into a panel the person has to act on.
-    static func readable(_ error: Error) -> String {
-        if let linear = error as? LinearError { return linear.description }
-        return (error as NSError).localizedDescription
-    }
-
-    /// After signing in there is no key in the field to test with, so the saved
-    /// credential is what gets checked.
-    private func testSaved(_ credential: LinearCredential) async {
-        let directory = makeDirectory(credential)
-        do {
-            let who = try await directory.whoami()
-            teams = try await directory.teams()
-            if teamID.isEmpty { teamID = teams.first?.id ?? "" }
-            connection = .connected("\(who.name) in \(who.organisation)")
-        } catch {
-            connection = .failed(Self.readable(error))
-        }
-    }
-
     @ViewBuilder
     private var status: some View {
-        switch connection {
+        switch flow.connection {
         case .idle:
-            EmptyView()
+            // Save needs a team, and a team needs a credential. Without this the
+            // panel showed a disabled Save and nothing at all saying why.
+            Text("Sign in or paste a key to choose where notes go.")
+                .font(LoupeTheme.Typography.note)
+                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+                .fixedSize(horizontal: false, vertical: true)
         case .testing:
             Text("Checking\u{2026}")
                 .font(LoupeTheme.Typography.note)
@@ -191,13 +159,16 @@ public struct LinearSettingsSheet: View {
             // Bordered, not quiet: a quiet button has no outline until it is
             // hovered, and there is no hover on a touch screen - so on the device
             // this read as a label rather than something to press.
-            Button("Test connection") { Task { await test() } }
+            Button("Test connection") { Task { await flow.test(key: key) } }
                 .buttonStyle(LoupeButtonStyle(kind: .secondary))
-                .disabled(key.isEmpty || connection == .testing)
+                .disabled(key.isEmpty || flow.connection == .testing)
             Spacer()
-            Button("Save") { save() }
-                .buttonStyle(LoupeButtonStyle(kind: .primary))
-                .disabled(teamID.isEmpty)
+            Button("Save") {
+                flow.save(key: key)
+                onClose()
+            }
+            .buttonStyle(LoupeButtonStyle(kind: .primary))
+            .disabled(!flow.canSave)
         }
     }
 
@@ -213,50 +184,5 @@ public struct LinearSettingsSheet: View {
             .labelsHidden()
             .accessibilityLabel(title)
         }
-    }
-
-    // MARK: - Behaviour
-
-    private func load() {
-        teamID = settings.destination?.teamID ?? ""
-        projectID = settings.destination?.projectID ?? ""
-        // The key itself is never read back into the field. It is in the Keychain,
-        // and showing it again would only give it somewhere else to leak from.
-        if settings.credential() != nil { connection = .connected("a saved credential") }
-    }
-
-    private func test() async {
-        connection = .testing
-        let credential: LinearCredential =
-            key.hasPrefix("lin_api_") ? .apiKey(key) : .accessToken(key)
-        let directory = makeDirectory(credential)
-        do {
-            let who = try await directory.whoami()
-            teams = try await directory.teams()
-            if teamID.isEmpty { teamID = teams.first?.id ?? "" }
-            await loadProjects()
-            connection = .connected("\(who.name) in \(who.organisation)")
-        } catch {
-            teams = []
-            projects = []
-            connection = .failed(Self.readable(error))
-        }
-    }
-
-    private func loadProjects() async {
-        guard !teamID.isEmpty, case .connected = connection else { return }
-        let credential: LinearCredential =
-            key.hasPrefix("lin_api_") ? .apiKey(key) : .accessToken(key)
-        projects = (try? await makeDirectory(credential).projects(teamID: teamID)) ?? []
-    }
-
-    private func save() {
-        if !key.isEmpty {
-            settings.save(key.hasPrefix("lin_api_") ? .apiKey(key) : .accessToken(key))
-        }
-        settings.destination = LinearDestination(
-            teamID: teamID,
-            projectID: projectID.isEmpty ? nil : projectID)
-        onClose()
     }
 }

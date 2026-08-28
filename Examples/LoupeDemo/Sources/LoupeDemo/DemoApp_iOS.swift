@@ -163,12 +163,21 @@ enum DemoScene {
                 }
 
                 // The settings panel, which is how a credential gets in on a device.
+                //
+                // Deliberately with no notes saved first. It used to save one, which
+                // quietly made it the only scene that could reach the panel at all:
+                // the gear lived in the tray, the tray only exists once a note has
+                // been saved, and so the state a person actually meets on a fresh
+                // install was the one state never being tested. See SER-700.
                 if scene == "settings" {
                     model.beginAnnotating()
-                    pick(at: CGPoint(x: size.width * 0.26, y: size.height * 0.27),
-                         in: window, model: model)
-                    model.saveComment("stock count is unreadable", tag: .polish)
                     model.onSettings?()
+                }
+
+                // Annotate mode, nothing picked. What somebody sees a second after
+                // installing, and the state the corner controls have to work in.
+                if scene == "zero" {
+                    model.beginAnnotating()
                 }
 
                 if scene == "hover" || scene == "pick" || scene == "tray" {

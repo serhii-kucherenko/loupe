@@ -84,12 +84,6 @@ struct TrayPanel: View {
             Button("Pick another") { model.resumePicking() }
                 .buttonStyle(LoupeButtonStyle(kind: .quiet))
                 .disabled(model.mode != .browsing)
-
-            if let onSettings = model.onSettings {
-                Button(action: onSettings) { Image(systemName: "gearshape") }
-                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
-                    .accessibilityLabel("Where notes are sent")
-            }
         }
         .padding(LoupeTheme.Space.md)
     }

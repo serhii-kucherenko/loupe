@@ -60,7 +60,7 @@ public struct OverlayRoot: View {
             // one screen with nothing to say which was the live one. A modal owns
             // the screen, and it carries its own way out.
             if showsControl, model.panel == nil {
-                enterExitControl
+                controls
                     .padding(LoupeTheme.Space.lg)
                     .padding(.bottom, safeArea.bottom)
                     .padding(.trailing, safeArea.trailing)
@@ -134,6 +134,31 @@ public struct OverlayRoot: View {
             .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
                                                   reduceMotion: reduceMotion),
                        value: model.mode)
+        }
+    }
+
+    /// The overlay's own corner: settings, and the way in and out.
+    ///
+    /// The gear used to live in the tray. The tray only exists in `.browsing`, and
+    /// the only way into `.browsing` is to save a note - so on a fresh install the
+    /// step that configures where notes are sent sat behind the step that sends
+    /// them, and there was no way to reach it at all. Reported by someone who could
+    /// not find it: "annotate sidepanel isn't visible when I enter annotate mode,
+    /// also unclear how to make it visible".
+    ///
+    /// Not in `.off`: the resting state over somebody's app is one pill, and nobody
+    /// needs to configure delivery before they have decided to annotate anything.
+    @ViewBuilder
+    private var controls: some View {
+        HStack(spacing: LoupeTheme.Space.sm) {
+            if let onSettings = model.onSettings, model.mode != .off {
+                Button(action: onSettings) { Image(systemName: "gearshape") }
+                    .buttonStyle(LoupeButtonStyle(kind: .secondary))
+                    .loupePanel()
+                    .accessibilityLabel("Where notes are sent")
+                    .loupeInteractive()
+            }
+            enterExitControl
         }
     }
 

@@ -27,7 +27,12 @@ public struct LoupeButtonStyle: ButtonStyle {
             .font(LoupeTheme.Typography.label)
             .foregroundStyle(foreground)
             .padding(.horizontal, LoupeTheme.Space.md)
-            .frame(minHeight: minHeight)
+            // Square at minimum, not just tall enough. An icon-only button is the
+            // label's width plus its padding, which for a gear came to about 40pt -
+            // under the 44pt `hit.touch` this file's own token says to meet. Every
+            // button with words in it is already wider, so this changes only the
+            // icons.
+            .frame(minWidth: minHeight, minHeight: minHeight)
             .background(
                 RoundedRectangle(cornerRadius: LoupeTheme.Radius.control, style: .continuous)
                     .fill(background(pressed: configuration.isPressed))

@@ -36,6 +36,7 @@ public enum LoupeLinear {
                               oauth: LinearOAuth? = nil,
                               present: ((AnyView) -> Void)? = nil) {
         guard let model = Loupe.model else { return }
+        presenter = present
 
         settingsSheet = {
             AnyView(LinearSettingsSheet(settings: settings, oauth: oauth, onClose: {
@@ -43,13 +44,23 @@ public enum LoupeLinear {
             }))
         }
 
-        model.onSettings = {
-            guard let sheet = settingsSheet?() else { return }
-            if let present {
-                present(sheet)
-            } else {
-                Loupe.model?.present(sheet)
-            }
+        model.onSettings = { presentSettings() }
+    }
+
+    /// Opens the settings panel from wherever the host wants.
+    ///
+    /// A host with its own settings screen can put a "Linear settings" item in its own
+    /// menu and call this, rather than relying on the overlay's gear. Named, because
+    /// the only way to do it before was to read `settingsSheet` out of this type and
+    /// present it yourself, which one adopter did - after reading the source.
+    public static func presentSettings() {
+        guard let sheet = settingsSheet?() else { return }
+        if let present = presenter {
+            present(sheet)
+        } else {
+            Loupe.model?.present(sheet)
         }
     }
+
+    private static var presenter: ((AnyView) -> Void)?
 }
