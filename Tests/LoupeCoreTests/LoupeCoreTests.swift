@@ -105,6 +105,32 @@ final class FileTransportTests: XCTestCase {
         XCTAssertTrue(dir.isFileURL)
     }
 
+    // A sandboxed app cannot write to `~/.loupe` at all, so promising that path
+    // there would be worse than the container it gets instead.
+    func testASandboxedAppIsGivenItsContainer() {
+        let sandboxed = FileTransport.defaultDirectory(
+            appName: "Demo", environment: ["APP_SANDBOX_CONTAINER_ID": "dev.loupe.demo"])
+
+        XCTAssertFalse(sandboxed.path.contains("/.loupe/"),
+                       "a sandboxed app is handed a path it cannot write to")
+        XCTAssertTrue(sandboxed.path.hasSuffix("Demo"))
+    }
+
+    // Mac Catalyst is `os(iOS)`, so a plain `os(macOS)` test missed it and a Mac app
+    // wrote into its container while the docs sent the agent to `~/.loupe`.
+    #if os(macOS) || targetEnvironment(macCatalyst)
+    func testAnUnsandboxedMacAppGetsTheDocumentedPath() {
+        let dir = FileTransport.defaultDirectory(appName: "Demo", environment: [:])
+
+        XCTAssertTrue(dir.path.hasSuffix("/.loupe/Demo"), dir.path)
+    }
+    #endif
+
+    func testTheSandboxIsDetectedFromTheEnvironment() {
+        XCTAssertFalse(FileTransport.isSandboxed([:]))
+        XCTAssertTrue(FileTransport.isSandboxed(["APP_SANDBOX_CONTAINER_ID": "x"]))
+    }
+
     @MainActor
     func testWritesJSONAndScreenshotsSideBySide() async throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())

@@ -36,7 +36,7 @@ Two transports, two shapes. Same JSON either way.
 **On disk** (`FileTransport`, the default on macOS):
 
 ```
-~/.loupe/<app-name>/<sessionID>/
+~/.loupe/<app-name>/<sessionID>/          # a Mac app that is not sandboxed
 ├── bundle.json
 ├── <annotation-id>.png             the element, cropped
 ├── <annotation-id>-context.png     the whole window, element outlined

@@ -24,11 +24,37 @@ public struct FileTransport: Transport {
     /// there, bundles go to Application Support and are really only useful until
     /// they are uploaded. On a device, prefer `HTTPTransport`.
     public static func defaultDirectory(appName: String) -> URL {
-        #if os(macOS)
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".loupe", isDirectory: true)
-            .appendingPathComponent(appName, isDirectory: true)
-        #else
+        defaultDirectory(appName: appName,
+                         environment: ProcessInfo.processInfo.environment)
+    }
+
+    /// Whether the process is inside an App Sandbox container.
+    ///
+    /// The environment is a parameter so this is testable: the alternative is a rule
+    /// nothing can exercise until someone ships a sandboxed build and finds out.
+    static func isSandboxed(_ environment: [String: String]) -> Bool {
+        environment["APP_SANDBOX_CONTAINER_ID"] != nil
+    }
+
+    static func defaultDirectory(appName: String, environment: [String: String]) -> URL {
+        // Catalyst is `os(iOS)` plus `targetEnvironment(macCatalyst)`, so a plain
+        // `os(macOS)` test is false there and a Mac app built with Catalyst was
+        // quietly writing into its container while the docs told the agent to look
+        // in `~/.loupe`. The agent found nothing and had no way to know why.
+        //
+        // Sandboxing is the other half, and it is why this is not a one-word change:
+        // a sandboxed app cannot write to `~/.loupe` at all. That applies to a
+        // sandboxed macOS app too, which had the same latent bug.
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        if !isSandboxed(environment) {
+            // `NSHomeDirectory()` rather than `homeDirectoryForCurrentUser`, which is
+            // unavailable under Catalyst. Outside a sandbox the two agree.
+            return URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent(".loupe", isDirectory: true)
+                .appendingPathComponent(appName, isDirectory: true)
+        }
+        #endif
+
         let base = (try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -39,7 +65,6 @@ public struct FileTransport: Transport {
         return base
             .appendingPathComponent("Loupe", isDirectory: true)
             .appendingPathComponent(appName, isDirectory: true)
-        #endif
     }
 
     public func send(_ bundle: AnnotationBundle) async throws {

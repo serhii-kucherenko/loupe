@@ -125,9 +125,12 @@ Loupe.capture(at: point, in: window, comment: "stale results on top", tag: .bug)
 try await Loupe.send()
 ```
 
-By default bundles are written to `~/.loupe/<app-name>/` on macOS, so it works with no server
-to run and an agent with filesystem access can read them directly. On a device use
-`HTTPTransport`, since nothing outside the app sandbox can read its files.
+By default bundles are written to `~/.loupe/<app-name>/` on a Mac, Catalyst included, so
+it works with no server to run and an agent with filesystem access can read them
+directly. **A sandboxed app cannot write there**, so it gets
+`Application Support/Loupe/<app-name>/` inside its own container instead - as does iOS,
+where nothing outside the sandbox can read the files anyway. On a device, use
+`HTTPTransport`.
 
 ## What a bundle contains
 

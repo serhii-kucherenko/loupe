@@ -231,7 +231,10 @@ Loupe.attach(to: window)
 
 ### 3. Where bundles land
 
-By default `~/.loupe/<app name>/` on macOS — nothing to run, and you can read it directly.
+By default `~/.loupe/<app name>/` on a Mac, Catalyst included - nothing to run, and you
+can read it directly. A **sandboxed** app cannot write there and gets
+`Application Support/Loupe/<app name>/` in its container instead. Check which one you
+have before concluding nothing was captured.
 
 On a device the app is sandboxed, so no file outside it is readable. Use `HTTPTransport`
 there and point it at something you can read:
@@ -259,7 +262,7 @@ One folder per Send:
 
 ```
 .loupe/<sessionID>/                (web, via the intake route)
-~/.loupe/<app name>/<sessionID>/   (macOS, by default)
+~/.loupe/<app name>/<sessionID>/   (a Mac app that is not sandboxed, by default)
 ├── bundle.json
 ├── <annotation-id>.png            the element, cropped
 └── <annotation-id>-context.png    the whole window, element outlined
@@ -328,5 +331,6 @@ making them through something Loupe did not wrap. Say so rather than ignoring it
 | `trace` is empty | The app uses a transport Loupe did not wrap, or the requests fired more than 30 seconds before the pick. |
 | No picture in a web bundle | Expected. A cross-origin image, a non-same-origin font, or shadow DOM content will all defeat the capture. The element reference and the trace still carry the annotation. |
 | Nothing arrives at the intake | Check the endpoint path matches, and that the route is not guarded off in the mode you are running. |
+| Nothing in `~/.loupe/` on a Mac | The app is sandboxed, so it cannot write there. Look in `Application Support/Loupe/<app name>/` inside its container. Mac Catalyst used to land there even unsandboxed; that was fixed after 0.1.1. |
 | SwiftPM refuses to resolve Loupe, naming a revision that "does not match previously recorded value" | The `v0.1.0` tag was moved once, before anyone depended on it, and SwiftPM remembers the commit a tag pointed at the first time it saw one. No clean or cache reset clears it. Delete `~/Library/org.swift.swiftpm/security/fingerprints/loupe-*.json` and resolve again. No tag will be moved again. |
 | The picked element has no name, only bounds | Expected on iOS under SwiftUI, which draws headings, stacks and backgrounds into one shared layer with no view or accessible name behind them. That is a region pick: the crop and the context shot carry the meaning. Name the element (`accessibilityIdentifier`) and it will be resolved on every other platform. |
