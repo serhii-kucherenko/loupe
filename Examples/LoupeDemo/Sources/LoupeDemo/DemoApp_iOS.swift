@@ -52,6 +52,13 @@ enum DemoScene {
         let scene = String(raw.dropFirst("scene=".count))
         guard let model = Loupe.model else { return }
 
+        if scene == "queue" || scene == "drain" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                Task { await runQueue(scene, in: window, model: model) }
+            }
+            return
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             MainActor.assumeIsolated {
                 model.beginAnnotating()
@@ -75,6 +82,50 @@ enum DemoScene {
                     model.saveComment("the empty basket gives you nowhere to go", tag: .bug)
                 }
             }
+        }
+    }
+
+    /// The offline queue across a real process boundary, which is the only place it
+    /// can honestly be checked. `scene=queue endpoint=dead` leaves three annotations
+    /// on disk; kill the app; `scene=drain endpoint=stub` proves they survived and
+    /// arrive exactly once.
+    private static func runQueue(_ scene: String, in window: UIWindow,
+                                 model: OverlayModel) async {
+        guard let queue = DemoLaunch.queue else {
+            print("LOUPE-QUEUE no queued transport: pass endpoint=dead or endpoint=stub")
+            return
+        }
+
+        if scene == "queue" {
+            model.beginAnnotating()
+            let size = window.bounds.size
+            for (index, fraction) in [0.27, 0.35, 0.43].enumerated() {
+                pick(at: CGPoint(x: size.width * 0.26, y: size.height * fraction),
+                     in: window, model: model)
+                model.saveComment("offline note \(index + 1)", tag: .bug)
+                model.resumePicking()
+            }
+
+            // One send is one bundle, whatever it holds, so three notes queue as a
+            // single pending file rather than three.
+            let notes = model.annotations.count
+            do {
+                _ = try await Loupe.send()
+                print("LOUPE-QUEUE unexpected: the send succeeded against a dead endpoint")
+            } catch {
+                print("LOUPE-QUEUE queued \(notes) notes while offline, "
+                      + "pending=\(queue.pendingCount) bundle(s)")
+            }
+            return
+        }
+
+        print("LOUPE-QUEUE survived the restart, pending=\(queue.pendingCount)")
+        do {
+            try await queue.drain()
+            print("LOUPE-QUEUE drained, pending=\(queue.pendingCount) "
+                  + "received=\(DemoLaunch.server?.intakeCount ?? -1)")
+        } catch {
+            print("LOUPE-QUEUE drain failed: \(error)")
         }
     }
 

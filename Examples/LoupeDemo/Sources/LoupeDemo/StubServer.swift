@@ -17,6 +17,15 @@ final class StubServer: @unchecked Sendable {
     private var listener: NWListener?
     private(set) var port: UInt16 = 0
 
+    /// How many bundles have been POSTed to the intake route.
+    ///
+    /// Bundles, not annotations: this stub reads one 8KB chunk per request, so a
+    /// body carrying screenshots is truncated and cannot be decoded. The count that
+    /// matters for the offline queue is anyway "arrived, and arrived once".
+    private let counter = NSLock()
+    private var received = 0
+    var intakeCount: Int { counter.withLock { received } }
+
     /// Seeded routes. `/v2/search` with an empty query is deliberately broken:
     /// the demo needs something genuinely wrong to annotate.
     private func response(for path: String, method: String) -> (status: Int, body: String) {
@@ -33,6 +42,9 @@ final class StubServer: @unchecked Sendable {
             return (200, Seed.searchJSON(matching: query))
         case ("GET", "/v2/cart"):
             return (200, #"{"items":[]}"#)
+        case ("POST", "/loupe/intake"):
+            counter.withLock { received += 1 }
+            return (200, #"{"ok":true}"#)
         case ("POST", "/v2/orders"):
             return (500, #"{"error":"payment provider timed out"}"#)
         default:
@@ -78,26 +90,65 @@ final class StubServer: @unchecked Sendable {
     var baseURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
 
     private func serve(_ connection: NWConnection) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
-            guard let self, let data, let request = String(data: data, encoding: .utf8) else {
-                connection.cancel(); return
-            }
-            let parts = request.split(separator: " ", maxSplits: 2)
-            let method = parts.first.map(String.init) ?? "GET"
-            let path = parts.count > 1 ? String(parts[1]) : "/"
+        receive(on: connection, buffer: Data())
+    }
 
-            let result = self.response(for: path, method: method)
-            let body = Data(result.body.utf8)
-            let head = """
-            HTTP/1.1 \(result.status) \(result.status == 200 ? "OK" : "Error")\r
-            Content-Type: application/json\r
-            Content-Length: \(body.count)\r
-            Connection: close\r
-            \r
-            
-            """
-            connection.send(content: Data(head.utf8) + body,
-                            completion: .contentProcessed { _ in connection.cancel() })
+    /// Reads the whole request before answering.
+    ///
+    /// It used to take one 8KB chunk, answer, and close. That is fine for a GET and
+    /// wrong for the intake route: a bundle carrying screenshots is hundreds of
+    /// kilobytes, so the socket went away while the client was still uploading and
+    /// every POST failed with "the network connection was lost". Found by draining
+    /// the offline queue on an iPad.
+    private func receive(on connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
+            [weak self] data, _, isComplete, error in
+            guard let self else { connection.cancel(); return }
+
+            var buffer = buffer
+            if let data { buffer.append(data) }
+            let done = isComplete || error != nil
+
+            guard let blank = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                if done { connection.cancel() } else { self.receive(on: connection, buffer: buffer) }
+                return
+            }
+
+            let header = String(decoding: buffer[..<blank.lowerBound], as: UTF8.self)
+            let body = buffer.count - blank.upperBound
+            if body < Self.contentLength(in: header), !done {
+                self.receive(on: connection, buffer: buffer)
+                return
+            }
+            self.respond(on: connection, to: header)
         }
+    }
+
+    private static func contentLength(in header: String) -> Int {
+        for line in header.split(separator: "\r\n")
+        where line.lowercased().hasPrefix("content-length:") {
+            return Int(line.dropFirst("content-length:".count)
+                .trimmingCharacters(in: .whitespaces)) ?? 0
+        }
+        return 0
+    }
+
+    private func respond(on connection: NWConnection, to header: String) {
+        let parts = header.split(separator: " ", maxSplits: 2)
+        let method = parts.first.map(String.init) ?? "GET"
+        let path = parts.count > 1 ? String(parts[1]) : "/"
+
+        let result = response(for: path, method: method)
+        let body = Data(result.body.utf8)
+        let head = """
+        HTTP/1.1 \(result.status) \(result.status == 200 ? "OK" : "Error")\r
+        Content-Type: application/json\r
+        Content-Length: \(body.count)\r
+        Connection: close\r
+        \r
+        
+        """
+        connection.send(content: Data(head.utf8) + body,
+                        completion: .contentProcessed { _ in connection.cancel() })
     }
 }

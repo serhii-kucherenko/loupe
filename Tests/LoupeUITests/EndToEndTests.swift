@@ -160,4 +160,44 @@ final class EndToEndTests: XCTestCase {
         XCTAssertEqual(bundle.annotations.map(\.screen), ["/search", "/cart"])
     }
 }
+
+/// The three entry points a host app is told to call. `handleShake` in particular had
+/// no test at all, and it is documented in the README, in the install guide and in the
+/// design notes as the way to wire shake-to-annotate.
+@MainActor
+final class LoupeEntryPointTests: XCTestCase {
+
+    private let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString)
+
+    override func setUp() {
+        super.setUp()
+        Loupe.start(app: AppInfo(name: "Demo", platform: "macOS"),
+                    transport: FileTransport(directory: directory))
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: directory)
+        super.tearDown()
+    }
+
+    func testShakeOpensAnnotateModeAndShakingAgainLeaves() {
+        XCTAssertEqual(Loupe.model?.mode, .off)
+
+        Loupe.handleShake()
+        XCTAssertEqual(Loupe.model?.mode, .picking(hover: nil))
+
+        Loupe.handleShake()
+        XCTAssertEqual(Loupe.model?.mode, .off)
+    }
+
+    func testBeginAndEndAreNotAToggle() {
+        Loupe.beginAnnotating()
+        Loupe.beginAnnotating()
+        XCTAssertEqual(Loupe.model?.mode, .picking(hover: nil), "begin twice still means begin")
+
+        Loupe.endAnnotating()
+        XCTAssertEqual(Loupe.model?.mode, .off)
+    }
+}
 #endif

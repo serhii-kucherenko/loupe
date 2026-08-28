@@ -119,6 +119,7 @@ struct RootView: View {
 @MainActor
 enum DemoLaunch {
     static func start(server: StubServer, platform: String) {
+        Self.server = server
         do {
             try server.start()
             print("LOUPE-DEMO stub server on port \(server.port)")
@@ -134,9 +135,37 @@ enum DemoLaunch {
                           commitSHA: gitSHA(),
                           platform: platform,
                           environment: "staging")
-        Loupe.start(app: app)
+        Loupe.start(app: app, transport: queuedTransport(server: server, appName: app.name))
         Seed.installIfNeeded(app: app, into: FileTransport.defaultDirectory(appName: app.name))
         LogRecorder.shared.info("stub server on \(server.port)", subsystem: "demo")
+    }
+
+    /// The transport for a run that is testing the offline queue.
+    ///
+    /// `endpoint=dead` points at a port nothing listens on, so every send fails and
+    /// the bundle stays on disk. `endpoint=stub` points at the demo's own intake
+    /// route. Run one, kill the app, run the other: that is the whole offline story,
+    /// and it is the half that cannot be checked without a real process boundary.
+    /// Absent the argument, the demo writes files like it always has.
+    private(set) static var queue: QueuedTransport?
+    /// So a scene can read what the stub actually received.
+    private(set) static var server: StubServer?
+
+    private static func queuedTransport(server: StubServer, appName: String) -> Transport? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let raw = arguments.first(where: { $0.hasPrefix("endpoint=") }) else { return nil }
+
+        let endpoint = String(raw.dropFirst("endpoint=".count)) == "stub"
+            ? server.baseURL.appendingPathComponent("loupe/intake")
+            : URL(string: "http://127.0.0.1:1/nothing-is-listening")!
+
+        let directory = FileTransport.defaultDirectory(appName: appName)
+            .appendingPathComponent("queue")
+        let queue = QueuedTransport(wrapping: HTTPTransport(endpoint: endpoint),
+                                    directory: directory)
+        Self.queue = queue
+        print("LOUPE-DEMO queue at \(directory.path), endpoint \(endpoint)")
+        return queue
     }
 
     /// The single most useful field in a bundle: it is how an agent checks out the

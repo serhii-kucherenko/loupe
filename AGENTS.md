@@ -54,6 +54,10 @@ contract: additive changes only, no breaking renames without a major.
   then `xcrun simctl launch --console-pty <device> dev.loupe.demo scene=tray`
   (`hover`, `pick`, `tray`). `simctl terminate` often does not take: `uninstall` and
   reinstall between runs, or the tray still holds the previous run's notes.
+- The offline queue across a real process boundary:
+  `scene=queue endpoint=dead`, then `simctl terminate` (never `uninstall`, which wipes
+  the queue), then `scene=drain endpoint=stub`. One send is one bundle, so three notes
+  queue as one pending file.
 - For the web, headless Chrome `--screenshot` **races the page** even at
   `--virtual-time-budget=15000`: roughly one run in three captures before the module
   script has finished, and the result looks exactly like the overlay failing to
