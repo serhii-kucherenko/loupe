@@ -109,6 +109,18 @@ public struct OverlayRoot: View {
                 }
 
                 tray(in: geometry.size, insets: safeArea)
+
+                if let panel = model.panel {
+                    // Over everything, centred, with the scrim under it: a panel
+                    // asking for a credential is the only thing that matters while
+                    // it is open.
+                    LoupeTheme.Colors.scrim.color
+                        .ignoresSafeArea()
+                        .onTapGesture { model.dismissPanel() }
+                    panel
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .loupeInteractive()
+                }
             }
             .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
                                                   reduceMotion: reduceMotion),
@@ -152,20 +164,25 @@ public struct OverlayRoot: View {
 
     @ViewBuilder
     private var highlight: some View {
+        // A shape being drawn is drawn, whatever mode is underneath it. It used to
+        // live inside the `.picking` branch, so a drag begun while a comment was
+        // open showed nothing until release.
+        if let dragged = model.dragRegion {
+            DragRegionLayer(rect: rect(dragged))
+        }
+
         switch model.mode {
         case .picking(let hovered):
-            // The rectangle wins while it is being dragged. Drawing the hover
-            // highlight underneath it as well says two different things about what
-            // is about to be captured.
-            if let dragged = model.dragRegion {
-                DragRegionLayer(rect: rect(dragged))
-            } else if let hovered {
+            if model.dragRegion == nil, let hovered {
                 HighlightLayer(rect: rect(hovered.bounds),
                                badge: model.annotations.count + 1,
                                isPinned: false)
             }
         case .commenting(let pick):
+            // The pinned pick stays visible while a new shape is drawn over it, so
+            // the previous note does not simply vanish mid-gesture.
             HighlightLayer(rect: rect(pick.ref.bounds), badge: pick.index, isPinned: true)
+                .opacity(model.dragRegion == nil ? 1 : 0.35)
         case .off, .browsing:
             EmptyView()
         }

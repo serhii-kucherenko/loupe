@@ -339,3 +339,41 @@ final class RepickWhileCommentingTests: XCTestCase {
         XCTAssertEqual(model.mode, .off)
     }
 }
+
+/// SER-698: "when I select another area while prev one is selected, I don't see what
+/// I'm selecting until I release the dragging". Drawing blind, on a touch screen,
+/// with a hand over the thing being sized.
+@MainActor
+final class DragPreviewTests: XCTestCase {
+
+    private func model() -> OverlayModel {
+        OverlayModel(session: AnnotationSession(
+            app: AppInfo(name: "Demo", platform: "macOS"), transport: SpyTransport()))
+    }
+
+    func testTheShapeIsVisibleWhileDraggingDuringAPick() {
+        let model = model()
+        model.beginAnnotating()
+
+        model.drag(to: Rect(x: 0, y: 0, width: 40, height: 40))
+
+        XCTAssertNotNil(model.dragRegion)
+    }
+
+    // The case that was broken: a drag begun while a comment is still open.
+    func testTheShapeIsVisibleWhileDraggingOverAnOpenComment() {
+        let model = model()
+        model.beginAnnotating()
+        model.pick(ref("row"))
+
+        model.drag(to: Rect(x: 0, y: 0, width: 40, height: 40))
+
+        XCTAssertNotNil(model.dragRegion, "sizing a rectangle blind is the complaint")
+    }
+
+    func testNothingIsDrawnWhenTheOverlayIsNotTakingInput() {
+        let model = model()
+        model.drag(to: Rect(x: 0, y: 0, width: 40, height: 40))
+        XCTAssertNil(model.dragRegion)
+    }
+}

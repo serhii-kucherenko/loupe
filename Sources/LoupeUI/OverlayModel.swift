@@ -44,6 +44,23 @@ public final class OverlayModel: ObservableObject {
     private let session: AnnotationSession
     private let queue: QueuedTransport?
 
+    /// A panel the tray can open, supplied by whoever knows what settings mean.
+    ///
+    /// A closure rather than a type, because `LoupeUI` must not learn what Linear is
+    /// - that is the whole point of `LoupeLinear` being a separate product. The tray
+    /// shows a settings control only when something has set this.
+    @Published public var onSettings: (() -> Void)?
+
+    /// A panel the overlay is currently showing on top of everything else.
+    ///
+    /// `AnyView` because the overlay deliberately does not know what is in it. The
+    /// settings sheet is the only user today, and it comes from a product `LoupeUI`
+    /// cannot see.
+    @Published public var panel: AnyView?
+
+    public func present(_ view: AnyView) { panel = view }
+    public func dismissPanel() { panel = nil }
+
     /// Called when the overlay wants the host to stop or start swallowing input.
     public var onModeChange: ((OverlayMode) -> Void)?
 
@@ -104,8 +121,13 @@ public final class OverlayModel: ObservableObject {
     }
 
     /// The person is dragging a rectangle out. Feedback only.
+    ///
+    /// Any mode that takes input, not just `.picking`. A drag begun while a comment
+    /// is open re-picks - and it used to draw nothing at all until the finger came
+    /// up, so someone was sizing a rectangle blind, on a touch screen, with a hand
+    /// over the thing being sized.
     public func drag(to rect: Rect?) {
-        guard case .picking = mode else { return }
+        guard mode.swallowsInput else { return }
         dragRegion = rect
     }
 

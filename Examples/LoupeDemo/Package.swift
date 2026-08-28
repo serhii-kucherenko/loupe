@@ -19,6 +19,7 @@ let package = Package(
             dependencies: [
                 .product(name: "LoupeCore", package: "loupe"),
                 .product(name: "LoupeUI", package: "loupe"),
+                .product(name: "LoupeLinear", package: "loupe"),
             ],
             swiftSettings: [
                 // SwiftUI re-exports SwiftUICore, and a plain executable is not an

@@ -30,6 +30,8 @@ targets:
         product: LoupeCore
       - package: Loupe
         product: LoupeUI
+      - package: Loupe
+        product: LoupeLinear
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.loupe.demo

@@ -5,17 +5,24 @@ import LoupeCore
 ///
 /// Every control here is a tool sitting on top of someone else's product, so it
 /// carries its own surface and never borrows the host app's button styling.
-struct LoupeButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, quiet }
+/// Public because anything built on top of Loupe - the Linear settings sheet, or a
+/// host's own panel - has to look like Loupe rather than reinventing the tokens.
+public struct LoupeButtonStyle: ButtonStyle {
+    public enum Kind: Sendable { case primary, secondary, quiet }
 
-    var kind: Kind = .secondary
-    var isFocused: Bool = false
+    public var kind: Kind = .secondary
+    public var isFocused: Bool = false
+
+    public init(kind: Kind = .secondary, isFocused: Bool = false) {
+        self.kind = kind
+        self.isFocused = isFocused
+    }
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
 
-    func makeBody(configuration: Configuration) -> some View {
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(LoupeTheme.Typography.label)
             .foregroundStyle(foreground)

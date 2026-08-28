@@ -1,6 +1,7 @@
 import SwiftUI
 import LoupeCore
 import LoupeUI
+import LoupeLinear
 
 /// The bits of the demo that differ between a Mac window and an iPad screen.
 ///
@@ -135,7 +136,16 @@ enum DemoLaunch {
                           commitSHA: gitSHA(),
                           platform: platform,
                           environment: "staging")
-        Loupe.start(app: app, transport: queuedTransport(server: server, appName: app.name))
+        // Keep the folder, and deliver to Linear once somebody has configured it.
+        // Not configured is not a failure: annotating works from the first launch,
+        // and delivery switches itself on when the credential exists.
+        let local = queuedTransport(server: server, appName: app.name)
+            ?? FileTransport(directory: FileTransport.defaultDirectory(appName: app.name))
+        Loupe.start(app: app, transport: LinearDelivery(keeping: local))
+
+        // Puts the settings panel behind the tray's gear. Everything Linear in this
+        // demo is these two lines.
+        LoupeLinear.enable()
         Seed.installIfNeeded(app: app, into: FileTransport.defaultDirectory(appName: app.name))
         LogRecorder.shared.info("stub server on \(server.port)", subsystem: "demo")
     }

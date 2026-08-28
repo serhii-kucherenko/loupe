@@ -162,6 +162,15 @@ enum DemoScene {
                     print("LOUPE-LOW picked at \(low) of \(size)")
                 }
 
+                // The settings panel, which is how a credential gets in on a device.
+                if scene == "settings" {
+                    model.beginAnnotating()
+                    pick(at: CGPoint(x: size.width * 0.26, y: size.height * 0.27),
+                         in: window, model: model)
+                    model.saveComment("stock count is unreadable", tag: .polish)
+                    model.onSettings?()
+                }
+
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

@@ -16,6 +16,7 @@ contract: additive changes only, no breaking renames without a major.
 |---|---|
 | `Sources/LoupeCore` | the bundle model, recorders, transports. No UIKit, no AppKit. |
 | `Sources/LoupeUI` | the picker, the theme, the overlay. Every platform seam lives here. |
+| `Sources/LoupeLinear` | delivery into Linear. Opt-in, and **nothing depends on it**. |
 | `web/` | the TypeScript SDK. Its own package, its own tests. |
 | `Examples/LoupeDemo` | the seeded two-role demo, plus the snapshot renderer. |
 | `Examples/LoupeDemoApp` | the same demo sources, built as an iPad/iPhone app. XcodeGen input only. |
@@ -24,6 +25,16 @@ contract: additive changes only, no breaking renames without a major.
 
 ## Rules
 - `LoupeCore` stays free of UIKit and AppKit. It is the testable half; keep it that way.
+- `LoupeCore` also stays free of any opinion about issue trackers. `LoupeLinear`
+  depends on `LoupeUI`, never the reverse: a host that wants capture only takes
+  `LoupeUI` and never compiles a line of Linear. The dependency that matters is the
+  one that does not exist.
+- A credential belongs in the Keychain and nowhere else. There is a test asserting it
+  never reaches `UserDefaults`; keep it passing.
+- Anything written to Linear must be safe to repeat. `QueuedTransport` retries whole
+  bundles, so a send that created three issues and then lost the network would
+  otherwise create them again. `LinearTransport` searches for the annotation's marker
+  before creating.
 - `LoupeUI` holds every platform seam, behind `#if canImport(...)`.
 - Visible UI follows `DESIGN.md`. A new token goes in that file **and** `docs/tokens.json`
   in the same change, then `cd web && npm run sync-tokens`. A token that means two things

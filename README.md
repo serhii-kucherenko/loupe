@@ -23,6 +23,28 @@ Handing an AI coding agent "the search feels wrong" gets you a guess. Handing it
 element you pointed at, a picture of it, and the exact request that fired behind it gets
 you a fix. Loupe is the capture side of that.
 
+## Straight into Linear
+
+Capture is half the job. `LoupeLinear` takes the other half: each note becomes its
+own Linear issue, in Triage, with both screenshots attached and the network trace in
+the body.
+
+```swift
+Loupe.start(app: app, transport: LinearDelivery(keeping: FileTransport(directory: dir)))
+LoupeLinear.enable()
+```
+
+Two lines, and a settings panel appears behind the tray's gear where someone can
+paste a personal API key or sign in with Linear. The credential goes to the Keychain.
+Team and project are pickers, because nobody types a UUID on an iPad.
+
+**One issue per note, never one per batch** - a session's notes are unrelated to each
+other. Sending is safe to repeat: a note whose issue already exists is a no-op, so a
+retry after a dropped connection cannot double-file.
+
+`LoupeCore` has no idea any of this exists. A host that wants capture only never
+takes the product.
+
 ## Related: Autopilot
 
 **Loupe captures. [Autopilot](https://github.com/serhii-kucherenko/autopilot) decides what to do about it.**
