@@ -130,4 +130,29 @@ final class OverlayWindowUIKitTests: XCTestCase {
 private final class NoopTransport: Transport {
     func send(_ bundle: AnnotationBundle) async throws {}
 }
+
+/// SER-690, found in a real app: the overlay held key status in every mode, so the
+/// host's own `UIKeyCommand` fired on some runs and not others depending on which
+/// window happened to be key.
+@MainActor
+final class OverlayKeyWindowTests: XCTestCase {
+
+    private func overlay(wantsKeyboard: Bool) -> PassthroughWindow {
+        let window = PassthroughWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+        window.wantsKeyboard = wantsKeyboard
+        return window
+    }
+
+    func testTheOverlayRefusesTheKeyboardWhileTheAppIsInCharge() {
+        // `.off` and `.browsing`, the modes that promise the app behaves normally.
+        XCTAssertFalse(overlay(wantsKeyboard: false).canBecomeKey)
+    }
+
+    func testTheOverlayTakesTheKeyboardWhileCommenting() {
+        // The comment field has to be typeable, and refusing key status here would
+        // have traded one bug for a worse one.
+        XCTAssertTrue(overlay(wantsKeyboard: true).canBecomeKey)
+    }
+}
 #endif
+

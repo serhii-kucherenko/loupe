@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import LoupeCore
 
 // `os(macOS)`, not `canImport(AppKit)`.
@@ -287,6 +288,29 @@ import UIKit
 /// `InteractiveRegions.swift`.
 final class PassthroughWindow: UIWindow {
     var isPassthrough: () -> Bool = { true }
+
+    /// Whether the overlay currently needs the keyboard.
+    ///
+    /// A stored flag rather than a read of the model, and that is not incidental:
+    /// `@Published` delivers on *willSet*, so anything asking the model for its mode
+    /// from inside that callback still sees the previous one. Reading it there made
+    /// the window refuse key status for the mode it was in the middle of entering.
+    var wantsKeyboard = false
+
+    /// Key status belongs to the app, except while the overlay needs the keyboard.
+    ///
+    /// The overlay sits above `.alert` and is never hidden, so UIKit was happy to
+    /// hand it key status the moment it appeared - and key events go to the key
+    /// window's responder chain. A host's `UIKeyCommand` then fired or did not
+    /// depending on which window happened to be key, which is exactly the kind of
+    /// intermittent fault nobody can reproduce. Found in a real app.
+    ///
+    /// `.picking` and `.commenting` genuinely need it: the comment field has to take
+    /// the keyboard. `.off` and `.browsing` are the modes that promise the app
+    /// underneath behaves exactly as it normally does.
+    override var canBecomeKey: Bool { wantsKeyboard }
+
+
     /// Window-coordinate frames of the overlay's own controls.
     var interactiveRegions: () -> [CGRect] = { [] }
 
@@ -372,6 +396,9 @@ public final class OverlayHost {
     let window: PassthroughWindow
     private let model: OverlayModel
     private weak var scene: UIWindowScene?
+    /// Who gets the keyboard back when the overlay stops needing it.
+    private weak var hostWindow: UIWindow?
+    private var modeWatch: AnyCancellable?
 
     /// Fails when the host window has no scene, rather than inventing one. A window
     /// without a scene cannot have a sibling above it, so there is nothing to build.
@@ -379,6 +406,7 @@ public final class OverlayHost {
         guard let scene = host.windowScene else { return nil }
         self.model = model
         self.scene = scene
+        self.hostWindow = host
 
         window = PassthroughWindow(windowScene: scene)
         // Above alerts, not above the host.
@@ -432,6 +460,31 @@ public final class OverlayHost {
             !(model?.mode.swallowsInput ?? false)
         }
         window.interactiveRegions = { [weak model] in model?.interactiveRegions ?? [] }
+
+        // `canBecomeKey` only stops the overlay from being handed the keyboard; it
+        // neither takes it when the overlay does need it nor gives back what was
+        // already taken. Both halves matter, and the second one is the half that
+        // would have gone unnoticed: leaving the comment field unable to type is a
+        // worse bug than the one being fixed.
+        //
+        // Observed rather than routed through `onModeChange`, which is a single slot
+        // the host may want for itself.
+        modeWatch = model.$mode.sink { [weak self] mode in
+            self?.updateKeyWindow(for: mode)
+        }
+        // Once for the mode it starts in, so `wantsKeyboard` is never left at its
+        // default while the overlay is already on screen.
+        updateKeyWindow(for: model.mode)
+    }
+
+    /// Who holds the keyboard, for one mode.
+    private func updateKeyWindow(for mode: OverlayMode) {
+        window.wantsKeyboard = mode.swallowsInput
+        if mode.swallowsInput {
+            if !window.isKeyWindow { window.makeKey() }
+        } else if window.isKeyWindow {
+            hostWindow?.makeKey()
+        }
     }
 }
 

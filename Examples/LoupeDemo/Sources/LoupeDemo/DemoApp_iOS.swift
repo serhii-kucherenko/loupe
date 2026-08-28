@@ -61,6 +61,35 @@ enum DemoScene {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             MainActor.assumeIsolated {
+                if scene == "key" {
+                    func report(_ label: String) {
+                        let key = window.windowScene?.windows.first { $0.isKeyWindow }
+                        let name = key.map { $0 === window ? "APP" : "\(type(of: $0))" }
+                        print("LOUPE-KEY \(label): key=\(name ?? "none")")
+                    }
+                    report("off")
+                    model.beginAnnotating()
+                    report("picking")
+
+                    // The half that matters: the comment field must still be able
+                    // to take the keyboard, or refusing key status has traded one
+                    // bug for a worse one.
+                    let point = CGPoint(x: window.bounds.width * 0.26,
+                                        y: window.bounds.height * 0.27)
+                    pick(at: point, in: window, model: model)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        MainActor.assumeIsolated {
+                            report("commenting")
+                            model.cancelComment()
+                            model.endAnnotating()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                MainActor.assumeIsolated { report("back to off") }
+                            }
+                        }
+                    }
+                    return
+                }
+
                 model.beginAnnotating()
 
                 // Proportional, not fixed. Points tuned on one iPad land off the
@@ -94,6 +123,9 @@ enum DemoScene {
                     }
                 }
 
+                // Which window holds the keyboard, in each mode. The host's own key
+                // commands go to the key window's responder chain, so an overlay
+                // that keeps key status silently breaks them.
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

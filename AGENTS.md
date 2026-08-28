@@ -62,7 +62,10 @@ contract: additive changes only, no breaking renames without a major.
   scene hook, which is the only way those states are ever seen:
   `cd Examples/LoupeDemoApp && xcodegen generate && xcodebuild -scheme LoupeDemo ...`,
   then `xcrun simctl launch --console-pty <device> dev.loupe.demo scene=tray`
-  (`hover`, `pick`, `tray`). `simctl terminate` often does not take: `uninstall` and
+  (`hover`, `pick`, `tray`, `drag`, `dragging`, `key`, `queue`, `drain`).
+  **A scene that must observe the mode it starts in has to run before the shared
+  `beginAnnotating()`**, or it measures the wrong one - that cost three wrong fixes to
+  a bug that was never there. `simctl terminate` often does not take: `uninstall` and
   reinstall between runs, or the tray still holds the previous run's notes.
 - The offline queue across a real process boundary:
   `scene=queue endpoint=dead`, then `simctl terminate` (never `uninstall`, which wipes
