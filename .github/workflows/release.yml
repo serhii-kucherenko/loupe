@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Everything passes before anything ships
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: web
+      - run: npm test
+        working-directory: web
+
+  npm:
+    name: Publish @loupe/web
+    needs: verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      # The Swift half releases on the git tag alone, so a missing npm token must
+      # not turn the whole release red. It skips and says so.
+      - name: Is there a token
+        id: token
+        run: |
+          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "have=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::No NPM_TOKEN secret, so the npm package was not published. The git tag is the Swift release and is unaffected. See SER-652."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.have == 'yes'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+        if: steps.token.outputs.have == 'yes'
+
+      # The tag is the source of truth for the version, so a tag that disagrees with
+      # package.json is a mistake worth stopping on rather than guessing about.
+      - name: The tag and package.json agree
+        if: steps.token.outputs.have == 'yes'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "tag $TAG does not match package.json $PKG"
+            exit 1
+          fi
+
+      # prepublishOnly wipes dist, re-syncs the tokens, rebuilds and runs the suite.
+      - name: Publish
+        if: steps.token.outputs.have == 'yes'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
