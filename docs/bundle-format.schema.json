@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/serhii-kucherenko/loupe/blob/main/docs/bundle-format.schema.json",
+  "title": "Loupe annotation bundle",
+  "description": "What one Send produces. The contract between any Loupe SDK and anything that consumes bundles.",
+  "type": "object",
+  "required": ["formatVersion", "sessionID", "app", "annotations", "sentAt"],
+  "additionalProperties": true,
+  "properties": {
+    "formatVersion": { "type": "integer", "const": 1 },
+    "sessionID": { "type": "string", "description": "UUID. One tray, one id, stable across an app restart." },
+    "sentAt": { "type": "string", "format": "date-time" },
+    "app": { "$ref": "#/$defs/appInfo" },
+    "annotations": { "type": "array", "items": { "$ref": "#/$defs/annotation" } }
+  },
+  "$defs": {
+    "appInfo": {
+      "type": "object",
+      "required": ["name", "platform"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "commitSHA": { "type": "string", "description": "So the agent checks out the right code." },
+        "platform": {
+          "type": "string",
+          "description": "Free-form, but use one of the known values where it fits.",
+          "examples": ["macOS", "iOS", "iPadOS", "web", "electron"]
+        },
+        "environment": { "type": "string", "default": "staging" }
+      }
+    },
+    "rect": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "width": { "type": "number" }, "height": { "type": "number" }
+      }
+    },
+    "elementRef": {
+      "type": "object",
+      "description": "Where the annotation points. Every field but bounds is best-effort: the crop plus the trace carry the meaning, so a missing field degrades quality, never correctness.",
+      "required": ["bounds"],
+      "additionalProperties": true,
+      "properties": {
+        "accessibilityID": { "type": "string" },
+        "label": { "type": "string" },
+        "className": { "type": "string" },
+        "selector": { "type": "string", "description": "CSS selector. Web and Electron only." },
+        "sourceFile": { "type": "string" },
+        "sourceLine": { "type": "integer" },
+        "bounds": { "$ref": "#/$defs/rect", "description": "In viewport coordinates." }
+      }
+    },
+    "networkEvent": {
+      "type": "object",
+      "required": ["method", "url", "durationMs", "at"],
+      "additionalProperties": true,
+      "properties": {
+        "method": { "type": "string" },
+        "url": { "type": "string" },
+        "statusCode": { "type": ["integer", "null"] },
+        "durationMs": { "type": "integer" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "logEvent": {
+      "type": "object",
+      "required": ["level", "message", "at"],
+      "additionalProperties": true,
+      "properties": {
+        "level": { "enum": ["debug", "info", "warning", "error"] },
+        "message": { "type": "string" },
+        "subsystem": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["id", "comment", "element", "capturedAt"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "description": "UUID. Also the screenshot filename on disk." },
+        "comment": { "type": "string" },
+        "tag": { "enum": ["bug", "idea", "polish", "question"] },
+        "element": { "$ref": "#/$defs/elementRef" },
+        "screenshotPNG": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "Only over HTTP. On disk the PNG sits beside the JSON as <id>.png and this field is absent."
+        },
+        "trace": { "type": "array", "items": { "$ref": "#/$defs/networkEvent" } },
+        "logs": { "type": "array", "items": { "$ref": "#/$defs/logEvent" } },
+        "screen": { "type": "string" },
+        "viewport": { "$ref": "#/$defs/rect" },
+        "capturedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

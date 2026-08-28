@@ -1,0 +1,68 @@
+{
+  "formatVersion": 1,
+  "sessionID": "6F9619FF-8B86-D011-B42D-00CF4FC964FF",
+  "sentAt": "2026-08-28T09:14:02Z",
+  "app": {
+    "name": "Acme Store",
+    "version": "1.4.0",
+    "commitSHA": "9f2c1ab",
+    "platform": "iPadOS",
+    "environment": "staging"
+  },
+  "annotations": [
+    {
+      "id": "1D2C3B4A-0000-4000-8000-000000000001",
+      "comment": "stale results stay on top after I clear the search",
+      "tag": "bug",
+      "capturedAt": "2026-08-28T09:13:44Z",
+      "screen": "/search",
+      "viewport": { "x": 0, "y": 0, "width": 1024, "height": 768 },
+      "element": {
+        "accessibilityID": "search.results.list",
+        "label": "Search results",
+        "className": "ResultsCollectionView",
+        "bounds": { "x": 16, "y": 120, "width": 992, "height": 540 }
+      },
+      "trace": [
+        {
+          "method": "GET",
+          "url": "https://api.acme.test/v2/search?q=blue",
+          "statusCode": 200,
+          "durationMs": 412,
+          "at": "2026-08-28T09:13:41Z"
+        },
+        {
+          "method": "GET",
+          "url": "https://api.acme.test/v2/search?q=",
+          "statusCode": 500,
+          "durationMs": 88,
+          "at": "2026-08-28T09:13:43Z"
+        }
+      ],
+      "logs": [
+        {
+          "level": "error",
+          "message": "SearchStore: keeping last good page after 500",
+          "subsystem": "search",
+          "at": "2026-08-28T09:13:43Z"
+        }
+      ]
+    },
+    {
+      "id": "1D2C3B4A-0000-4000-8000-000000000002",
+      "comment": "this empty state has no way forward",
+      "tag": "polish",
+      "capturedAt": "2026-08-28T09:13:58Z",
+      "screen": "/cart",
+      "viewport": { "x": 0, "y": 0, "width": 1024, "height": 768 },
+      "element": {
+        "label": "Your cart is empty",
+        "className": "EmptyStateView",
+        "selector": "main > .cart > .empty-state",
+        "bounds": { "x": 312, "y": 300, "width": 400, "height": 180 }
+      },
+      "trace": [],
+      "logs": []
+    }
+  ]
+}

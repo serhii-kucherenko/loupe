@@ -14,6 +14,9 @@ public struct ElementRef: Codable, Sendable, Equatable {
     public var label: String?
     /// The view/class name as reported by the runtime, e.g. `SearchField`.
     public var className: String?
+    /// A CSS selector that finds the element again. Web and Electron only:
+    /// Apple platforms have no equivalent and leave it nil.
+    public var selector: String?
     /// Optional source stamp when the app opted into `.annotatable()`.
     public var sourceFile: String?
     public var sourceLine: Int?
@@ -24,6 +27,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
         accessibilityID: String? = nil,
         label: String? = nil,
         className: String? = nil,
+        selector: String? = nil,
         sourceFile: String? = nil,
         sourceLine: Int? = nil,
         bounds: Rect
@@ -31,9 +35,21 @@ public struct ElementRef: Codable, Sendable, Equatable {
         self.accessibilityID = accessibilityID
         self.label = label
         self.className = className
+        self.selector = selector
         self.sourceFile = sourceFile
         self.sourceLine = sourceLine
         self.bounds = bounds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accessibilityID = try c.decodeIfPresent(String.self, forKey: .accessibilityID)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        className = try c.decodeIfPresent(String.self, forKey: .className)
+        selector = try c.decodeIfPresent(String.self, forKey: .selector)
+        sourceFile = try c.decodeIfPresent(String.self, forKey: .sourceFile)
+        sourceLine = try c.decodeIfPresent(Int.self, forKey: .sourceLine)
+        bounds = try c.decode(Rect.self, forKey: .bounds)
     }
 }
 
@@ -75,6 +91,9 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
     public var logs: [LogEvent]
     /// Where in the app this happened: route, screen name, tab.
     public var screen: String?
+    /// The window or viewport at capture time. `element.bounds` is expressed
+    /// inside this, so without it a phone and a desktop are indistinguishable.
+    public var viewport: Rect?
     public var capturedAt: Date
 
     public init(
@@ -86,12 +105,14 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
         trace: [NetworkEvent] = [],
         logs: [LogEvent] = [],
         screen: String? = nil,
+        viewport: Rect? = nil,
         capturedAt: Date = Date()
     ) {
         self.id = id; self.comment = comment; self.tag = tag
         self.element = element; self.screenshotPNG = screenshotPNG
         self.trace = trace; self.logs = logs
-        self.screen = screen; self.capturedAt = capturedAt
+        self.screen = screen; self.viewport = viewport
+        self.capturedAt = capturedAt
     }
 
     /// Hand-written so that a bundle produced by an older build still decodes.
@@ -107,6 +128,7 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
         trace = try c.decodeIfPresent([NetworkEvent].self, forKey: .trace) ?? []
         logs = try c.decodeIfPresent([LogEvent].self, forKey: .logs) ?? []
         screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        viewport = try c.decodeIfPresent(Rect.self, forKey: .viewport)
         capturedAt = try c.decode(Date.self, forKey: .capturedAt)
     }
 }
@@ -114,14 +136,36 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
 /// What one `Send` produces: the whole tray, plus the build it came from.
 /// Triage reads this and decides the ticket mapping.
 public struct AnnotationBundle: Codable, Sendable {
+    /// The current format. Bumped only by a breaking change; see
+    /// `docs/bundle-format.md`. Adding a field never bumps it.
+    public static let currentFormatVersion = 1
+
+    public var formatVersion: Int
     public var sessionID: UUID
     public var app: AppInfo
     public var annotations: [Annotation]
     public var sentAt: Date
 
-    public init(sessionID: UUID, app: AppInfo, annotations: [Annotation], sentAt: Date = Date()) {
+    public init(
+        sessionID: UUID,
+        app: AppInfo,
+        annotations: [Annotation],
+        sentAt: Date = Date(),
+        formatVersion: Int = AnnotationBundle.currentFormatVersion
+    ) {
+        self.formatVersion = formatVersion
         self.sessionID = sessionID; self.app = app
         self.annotations = annotations; self.sentAt = sentAt
+    }
+
+    /// A bundle written before the field existed is version 1 by definition.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        formatVersion = try c.decodeIfPresent(Int.self, forKey: .formatVersion) ?? 1
+        sessionID = try c.decode(UUID.self, forKey: .sessionID)
+        app = try c.decode(AppInfo.self, forKey: .app)
+        annotations = try c.decode([Annotation].self, forKey: .annotations)
+        sentAt = try c.decode(Date.self, forKey: .sentAt)
     }
 }
 
@@ -142,5 +186,14 @@ public struct AppInfo: Codable, Sendable, Equatable {
     ) {
         self.name = name; self.version = version; self.commitSHA = commitSHA
         self.platform = platform; self.environment = environment
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        version = try c.decodeIfPresent(String.self, forKey: .version)
+        commitSHA = try c.decodeIfPresent(String.self, forKey: .commitSHA)
+        platform = try c.decode(String.self, forKey: .platform)
+        environment = try c.decodeIfPresent(String.self, forKey: .environment) ?? "staging"
     }
 }
