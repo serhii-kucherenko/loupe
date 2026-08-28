@@ -70,6 +70,19 @@ npm install loupe-web
 No runtime dependencies. See [`web/README.md`](web/README.md). Electron comes free: its
 renderer is Chromium.
 
+## Install it with an agent
+
+Loupe is meant to be wired in by the same agent that will read its output, so the
+instructions are written for one. Paste this at your coding agent:
+
+> Install Loupe into this project by following
+> https://raw.githubusercontent.com/serhii-kucherenko/loupe/main/docs/agent-install.md
+> Do not skip the verification section.
+
+[`docs/agent-install.md`](docs/agent-install.md) covers both halves, the dev-only guard, an
+intake route that writes bundles **into the repository** so the agent can read them, and a
+verification checklist it has to pass before reporting the job done.
+
 ## Use
 
 Two calls at launch, in dev and staging builds only. The overlay does the rest.
