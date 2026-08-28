@@ -34,9 +34,10 @@ Loupe.start(app: app, transport: LinearDelivery(keeping: FileTransport(directory
 LoupeLinear.enable()
 ```
 
-Two lines, and a settings panel appears behind the tray's gear where someone can
+Two lines, and a settings panel appears behind the drawer's gear where someone can
 paste a personal API key or sign in with Linear. The credential goes to the Keychain.
-Team and project are pickers, because nobody types a UUID on an iPad.
+The workspace is shown, because a credential belongs to exactly one; team and project
+are pickers, because nobody types a UUID on an iPad.
 
 **One issue per note, never one per batch** - a session's notes are unrelated to each
 other. Sending is safe to repeat: a note whose issue already exists is a no-op, so a
@@ -179,10 +180,28 @@ language from that page alone.
 
 ## What it looks like
 
+Point at something. The highlight climbs to the element you *meant*, in either theme:
+
 | | |
 |---|---|
-| ![Hovering](docs/screenshots/01-hover-light.png) | ![The tray](docs/screenshots/03-tray-dark.png) |
-| Point at something. The highlight climbs to the element you *meant*. | Several screens, one tray. Every note carries the endpoint behind it. |
+| ![Hovering, light](docs/screenshots/01-hover-light.png) | ![Hovering, dark](docs/screenshots/01-hover-dark.png) |
+
+Say what is wrong. Everything else about that moment is captured for you:
+
+| | |
+|---|---|
+| ![The comment popover, light](docs/screenshots/02-comment-light.png) | ![The comment popover, dark](docs/screenshots/02-comment-dark.png) |
+
+**While you annotate, Loupe leaves one thing on your app: a pull on the edge.** Drag it
+up or down to slide it off whatever you are trying to point at. Tap it, or drag it
+inward, and the drawer comes out with every note, the settings, and Send:
+
+| | |
+|---|---|
+| ![The drawer, light](docs/screenshots/03-tray-light.png) | ![The drawer, dark](docs/screenshots/03-tray-dark.png) |
+
+The drawer never opens itself. Saving a note changes the number on the pull and
+nothing else, so the layout under your hands stays where you left it.
 
 Drag to say "this bit", on any platform. The rectangle is dashed while you draw it
 and solid once it is yours:
@@ -191,11 +210,15 @@ and solid once it is yours:
 |---|---|
 | ![Dragging on the web](docs/screenshots/10-web-dragging.png) | ![A region on iPad](docs/screenshots/09-ipad-drag-region.png) |
 
-On an iPad the tray is a side panel; on an iPhone it becomes a bottom sheet:
+On an iPad the drawer is a side panel; on an iPhone it becomes a bottom sheet:
 
 | | |
 |---|---|
 | ![iPad](docs/screenshots/07-ipad-tray.png) | ![iPhone](docs/screenshots/08-iphone-sheet.png) |
+
+Picking an element on an iPad, with the drawer shut:
+
+![Picking on iPad](docs/screenshots/06-ipad-pick.png)
 
 The same thing on the web, in Chromium:
 
@@ -238,7 +261,7 @@ which endpoint a screen calls.
 ## Status
 
 Pre-1.0, and working end to end on every platform it claims: the picker, the recorders,
-the transports, the offline queue, the overlay, the tray, and a seeded two-role demo on
+the transports, the offline queue, the overlay, the drawer, and a seeded two-role demo on
 macOS, iPad, iPhone and the web. Run and screenshotted on the iPad and iPhone
 simulators; not yet on physical hardware.
 

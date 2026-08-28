@@ -116,6 +116,13 @@ public struct OverlayRoot: View {
         let height = size.height
         Button { model.toggleTray() } label: {
             VStack(spacing: LoupeTheme.Space.xs) {
+                // Says "drag me", which nothing else here did: "handler doesn't look
+                // like draggable btw". Horizontal bars on a pull that travels
+                // vertically - the grip runs across the direction of travel, the way
+                // every sheet grabber does.
+                Image(systemName: "line.3.horizontal")
+                    .font(LoupeTheme.Typography.note)
+                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
                 Image(systemName: model.trayExpanded ? "chevron.right" : "chevron.left")
                 Text("\(model.annotations.count)")
                     .font(LoupeTheme.Typography.label)
@@ -126,7 +133,8 @@ public struct OverlayRoot: View {
         .buttonStyle(LoupeButtonStyle(kind: .secondary))
         .loupePanel()
         .accessibilityLabel(pullAccessibilityLabel)
-        .accessibilityHint("Slides the notes panel in and out")
+        .accessibilityHint("Slides the notes panel in and out. Drag it up or down to "
+                           + "move it off whatever is underneath.")
         .loupeInteractive()
         .position(x: pullX(in: size), y: pullY(in: size))
         // High priority, not a plain `.gesture`. The pull is a `Button`, and a

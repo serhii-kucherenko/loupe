@@ -21,6 +21,16 @@ public final class LinearSettingsFlow: ObservableObject {
     }
 
     @Published public private(set) var connection: Connection = .idle
+
+    /// The workspace the credential belongs to, and who it belongs to.
+    ///
+    /// The workspace is shown but never chosen. A Linear credential - personal key or
+    /// OAuth token alike - is issued by exactly one workspace, so there is no list to
+    /// pick from: changing workspace means changing credential. Showing it beside the
+    /// team and the project is what makes that obvious, rather than leaving somebody
+    /// hunting for a picker that cannot exist.
+    @Published public private(set) var workspace: String?
+    @Published public private(set) var person: String?
     @Published public private(set) var teams: [LinearDirectory.Team] = []
     @Published public private(set) var projects: [LinearDirectory.Project] = []
     @Published public var teamID = ""
@@ -84,10 +94,14 @@ public final class LinearSettingsFlow: ObservableObject {
             if teamID.isEmpty || !found.contains(where: { $0.id == teamID }) {
                 teamID = found.first?.id ?? ""
             }
-            connection = .connected("\(who.name) in \(who.organisation)")
+            person = who.name
+            workspace = who.organisation
+            connection = .connected(who.name)
             await loadProjects()
         } catch {
             credential = nil
+            person = nil
+            workspace = nil
             teams = []
             projects = []
             connection = .failed(Self.readable(error))

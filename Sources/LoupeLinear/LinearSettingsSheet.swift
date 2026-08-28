@@ -57,6 +57,16 @@ public struct LinearSettingsSheet: View {
             status
 
             if !flow.teams.isEmpty {
+                // Where a note actually lands, in the order it narrows: workspace,
+                // then team, then project.
+                if let workspace = flow.workspace {
+                    field("Workspace") {
+                        Text(workspace)
+                            .font(LoupeTheme.Typography.label)
+                            .foregroundStyle(LoupeTheme.Colors.ink.color)
+                    }
+                }
+
                 picker("Team", selection: $flow.teamID,
                        options: flow.teams.map { ($0.id, "\($0.name) · \($0.key)") })
                     .onChange(of: flow.teamID) { _ in Task { await flow.loadProjects() } }
@@ -170,6 +180,19 @@ public struct LinearSettingsSheet: View {
             .buttonStyle(LoupeButtonStyle(kind: .primary))
             .disabled(!flow.canSave)
         }
+    }
+
+    /// A labelled row. The workspace uses one without a control, because it is not a
+    /// choice - it is what the credential is.
+    private func field<Content: View>(_ title: String,
+                                      @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
+            Text(title)
+                .font(LoupeTheme.Typography.note)
+                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func picker(_ title: String, selection: Binding<String>,

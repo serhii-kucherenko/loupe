@@ -100,7 +100,7 @@ final class LinearSettingsFlowTests: XCTestCase {
 
         await flow.load()
 
-        XCTAssertEqual(flow.connection, .connected("Serhii in Skailex"))
+        XCTAssertEqual(flow.connection, .connected("Serhii"))
         XCTAssertFalse(flow.teams.isEmpty, "the panel must ask Linear again on open")
         XCTAssertTrue(flow.canSave)
     }
@@ -120,6 +120,35 @@ final class LinearSettingsFlowTests: XCTestCase {
     }
 
     // MARK: - The rest of the contract
+
+    /// The workspace is shown, never chosen: a credential is issued by exactly one, so
+    /// there is no list to pick from. Somebody has to be able to see which one it is,
+    /// because a key for the wrong workspace is the common mistake and "connected"
+    /// would hide it completely.
+    func testTheWorkspaceIsReportedAlongsideTheTeamAndProject() async {
+        let recorder = Recorder()
+        let flow = LinearSettingsFlow(settings: settings(), makeDirectory: directory(recorder))
+
+        await flow.test(key: "lin_api_abc")
+
+        XCTAssertEqual(flow.workspace, "Skailex")
+        XCTAssertEqual(flow.person, "Serhii")
+        XCTAssertEqual(flow.teams.map(\.name), ["Core Team"])
+        XCTAssertEqual(flow.projects.map(\.name), ["Loupe"])
+    }
+
+    func testARejectedCredentialForgetsTheWorkspaceToo() async {
+        let recorder = Recorder()
+        let flow = LinearSettingsFlow(settings: settings(), makeDirectory: directory(recorder))
+        await flow.test(key: "lin_api_abc")
+        XCTAssertNotNil(flow.workspace)
+
+        recorder.failWith = 401
+        await flow.test(key: "lin_api_wrong")
+
+        XCTAssertNil(flow.workspace, "a stale workspace beside a dead key is a lie")
+        XCTAssertNil(flow.person)
+    }
 
     func testSaveIsRefusedUntilThereIsSomewhereToSend() async {
         let flow = LinearSettingsFlow(settings: settings(), makeDirectory: directory(Recorder()))

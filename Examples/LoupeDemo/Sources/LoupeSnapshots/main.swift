@@ -146,6 +146,9 @@ enum Scene: String, CaseIterable {
                                 label: "Your basket is empty"),
                        screen: "/cart")
             model.saveComment("the empty basket gives you nowhere to go from here", tag: .polish)
+            // Asked for, because the drawer no longer opens itself. Saving a note
+            // used to change the layout under somebody's hands.
+            model.setTrayExpanded(true)
         }
         return model
     }
