@@ -58,7 +58,9 @@ Then add the products you need. `LoupeCore` alone is enough to read or write bun
 .product(name: "LoupeUI", package: "loupe"),
 ```
 
-Requires Swift 5.9, macOS 13, or iOS 16.
+Requires Swift 5.9, macOS 13, or iOS 16. **Mac Catalyst is supported**, and the sources
+compile clean in Swift 6 language mode - both are checked by CI, because neither the macOS
+job nor the iOS job can catch a break in them.
 
 ### Web and Electron
 
