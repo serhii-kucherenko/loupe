@@ -99,13 +99,21 @@ jobs:
 
   ipad:
     name: Build the demo app (iPad)
-    runs-on: macos-14
+    # Not macos-14 like the other Apple jobs. XcodeGen writes the newest project
+    # format it knows and offers no way to pin an older one, so the generated
+    # project cannot be opened by the Xcode on that image at all
+    # ("future Xcode project file format (77)").
+    runs-on: macos-15
     # The demo's iOS half - the app delegate, the scene hook, the window attach - is
     # not in any SwiftPM target, so the iOS job above never compiles it. Every
     # device bug found so far came out of running this app, so it has to keep
     # building.
     steps:
       - uses: actions/checkout@v5
+
+      # Whatever the newest Xcode on the image is, for the same reason.
+      - name: Use the newest Xcode on the image
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
 
       - name: Install XcodeGen
         run: brew install xcodegen
