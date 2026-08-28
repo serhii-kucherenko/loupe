@@ -28,6 +28,12 @@ contract: additive changes only, no breaking renames without a major.
 - Visible UI follows `DESIGN.md`. A new token goes in that file **and** `docs/tokens.json`
   in the same change, then `cd web && npm run sync-tokens`. A token that means two things
   on two platforms is worse than no token at all, and CI fails on the drift.
+- **Nothing Loupe draws may sit over the app while picking.** Anything with a
+  `.loupeInteractive()` region *takes* the touches that land on it, so a panel in the
+  way is not merely ugly - whatever is under it cannot be annotated, which is the one
+  thing this tool must never take away. `scene=occlusion` is the guard: it asserts a
+  point where chrome used to be is not inside any interactive region and still
+  resolves to a real element.
 - Two gestures, not one: a tap picks an element, a drag picks a region. A region is a
   first-class answer (`element.kind: "region"`), not a failure - a gap between two rows
   is real feedback and no view corresponds to it. On the web a region carries no crop:
@@ -62,7 +68,8 @@ contract: additive changes only, no breaking renames without a major.
   scene hook, which is the only way those states are ever seen:
   `cd Examples/LoupeDemoApp && xcodegen generate && xcodebuild -scheme LoupeDemo ...`,
   then `xcrun simctl launch --console-pty <device> dev.loupe.demo scene=tray`
-  (`hover`, `pick`, `tray`, `drag`, `dragging`, `key`, `queue`, `drain`).
+  (`hover`, `pick`, `tray`, `drag`, `dragging`, `key`, `queue`, `drain`, `repick`,
+  `occlusion`).
   **A scene that must observe the mode it starts in has to run before the shared
   `beginAnnotating()`**, or it measures the wrong one - that cost three wrong fixes to
   a bug that was never there. `simctl terminate` often does not take: `uninstall` and

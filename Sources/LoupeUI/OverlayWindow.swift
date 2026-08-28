@@ -583,26 +583,11 @@ private struct OverlayRootWithPill: View {
                     )
             }
 
+            // The enter/exit control lives inside `OverlayRoot` so both platforms
+            // get the same one in the same place.
             OverlayRoot(model: model, safeArea: safeArea)
 
             SafeAreaReader { safeArea = $0 }
-
-            if model.mode == .off {
-                Button {
-                    model.beginAnnotating()
-                } label: {
-                    Label("Annotate", systemImage: "scope")
-                }
-                .buttonStyle(LoupeButtonStyle(kind: .primary))
-                .loupePanel()
-                .padding(LoupeTheme.Space.lg)
-                // The overlay ignores the safe area, so without this the pill sits
-                // in the home indicator's space.
-                .padding(.bottom, safeArea.bottom)
-                .padding(.trailing, safeArea.trailing)
-                .accessibilityLabel("Start annotating")
-                .loupeInteractive()
-            }
         }
         .onPreferenceChange(InteractiveRegionsKey.self) { regions in
             MainActor.assumeIsolated { model.interactiveRegions = regions }

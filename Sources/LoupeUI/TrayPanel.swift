@@ -23,9 +23,6 @@ extension Image {
 /// centre is where the app being annotated lives.
 struct TrayPanel: View {
     @ObservedObject var model: OverlayModel
-    /// One line rather than a panel. True while picking, so the page underneath
-    /// stays reachable, and whenever there is nothing to show yet.
-    var compact: Bool = false
     /// Rendered as a bottom sheet: full width, flush with the bottom edge. What
     /// `DESIGN.md` asks for on a phone, and the reason the panel is pushed down by
     /// its own corner radius - `UnevenRoundedRectangle` would say it better and is
@@ -34,51 +31,17 @@ struct TrayPanel: View {
     /// The home indicator's height. A sheet flush with the edge has to keep it clear
     /// itself, since nothing outside is padding it any more.
     var safeBottom: CGFloat = 0
-    var onClose: () -> Void
 
     @FocusState private var sendFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let width: CGFloat = 340
 
-    var body: some View {
-        // A full-height panel saying "0 notes" and offering to send them would also
-        // be competing with the popover for attention while someone types into it.
-        if compact || model.annotations.isEmpty {
-            // The one-line bar stays a floating pill even on a phone: it is a status
-            // line, not a surface, and a full-width sheet saying "0 notes" would be
-            // covering the app for no reason.
-            bar.padding(.bottom, sheet ? safeBottom + LoupeTheme.Radius.panel : 0)
-        } else {
-            full
-        }
-    }
-
-    private var bar: some View {
-        HStack(spacing: LoupeTheme.Space.sm) {
-            Text(barTitle)
-                .font(LoupeTheme.Typography.body)
-                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
-            Spacer()
-            if !model.annotations.isEmpty, model.mode == .picking(hover: nil) || model.mode == .browsing {
-                Button("Review") { model.review() }
-                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
-            }
-            closeButton
-        }
-        .padding(.horizontal, LoupeTheme.Space.md)
-        .padding(.vertical, LoupeTheme.Space.sm)
-        .frame(width: Self.width)
-        .loupePanel()
-    }
-
-    private var barTitle: String {
-        switch model.annotations.count {
-        case 0: return "Point at something that looks wrong."
-        case 1: return "1 note · point at another"
-        case let n: return "\(n) notes · point at another"
-        }
-    }
+    // One shape now. The one-line bar it used to fall back to is gone: it only ever
+    // rendered while picking or commenting, and nothing draws a tray in those modes
+    // any more, because a bar that takes touches makes whatever is under it
+    // unpickable.
+    var body: some View { full }
 
     private var full: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -121,20 +84,10 @@ struct TrayPanel: View {
             Button("Pick another") { model.resumePicking() }
                 .buttonStyle(LoupeButtonStyle(kind: .quiet))
                 .disabled(model.mode != .browsing)
-            closeButton
         }
         .padding(LoupeTheme.Space.md)
     }
 
-    private var closeButton: some View {
-        Button {
-            onClose()
-        } label: {
-            Image(systemName: "xmark")
-        }
-        .buttonStyle(LoupeButtonStyle(kind: .quiet))
-        .accessibilityLabel("Leave annotate mode")
-    }
 
     @ViewBuilder
     private var footer: some View {

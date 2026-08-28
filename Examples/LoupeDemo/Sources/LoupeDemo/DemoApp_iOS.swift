@@ -142,6 +142,18 @@ enum DemoScene {
                     }
                 }
 
+                // The bar used to sit top-trailing and swallow every touch on it.
+                // Anything under it was unpickable, which is what got reported.
+                if scene == "occlusion" {
+                    let underTheOldBar = CGPoint(x: size.width * 0.77,
+                                                 y: size.height * 0.06)
+                    let regions = model.interactiveRegions
+                    print("LOUPE-OCCLUSION regions=\(regions)")
+                    let blocked = regions.contains { $0.contains(underTheOldBar) }
+                    print("LOUPE-OCCLUSION point \(underTheOldBar) blocked=\(blocked)")
+                    report(at: underTheOldBar, in: window, label: "under the old bar")
+                }
+
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

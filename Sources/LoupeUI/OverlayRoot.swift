@@ -32,6 +32,34 @@ public struct OverlayRoot: View {
     }
 
     public var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            chrome.opacity(model.mode.isVisible ? 1 : 0)
+
+            // Outside the opacity gate on purpose: in `.off` the overlay draws
+            // nothing, and the way in has to still be there.
+            //
+            // On a Mac the way in is the hotkey, so the control appears only once
+            // annotate mode is open - but it does appear, because the tray's xmark
+            // is gone and a mode you cannot see your way out of is worse than the
+            // duplicate control was.
+            if showsControl {
+                enterExitControl
+                    .padding(LoupeTheme.Space.lg)
+                    .padding(.bottom, safeArea.bottom)
+                    .padding(.trailing, safeArea.trailing)
+            }
+        }
+    }
+
+    private var showsControl: Bool {
+        #if canImport(UIKit)
+        return true
+        #else
+        return model.mode != .off
+        #endif
+    }
+
+    private var chrome: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 if model.mode.swallowsInput {
@@ -73,7 +101,40 @@ public struct OverlayRoot: View {
                                                   reduceMotion: reduceMotion),
                        value: model.mode)
         }
-        .opacity(model.mode.isVisible ? 1 : 0)
+    }
+
+    /// One control, in one place, that means "annotate mode" both ways.
+    ///
+    /// It used to be two objects in two corners: a pill bottom-trailing to get in,
+    /// an xmark on the tray top-trailing to get out. Nothing said the second was the
+    /// way out of the first, and the pill vanished the moment you were in. Someone
+    /// who found their way in can now leave by looking where they came from.
+    @ViewBuilder
+    private var enterExitControl: some View {
+        let isOff = model.mode == .off
+        Button {
+            model.toggleAnnotating()
+        } label: {
+            Label(isOff ? "Annotate" : exitTitle, systemImage: isOff ? "scope" : "checkmark")
+        }
+        .buttonStyle(LoupeButtonStyle(kind: .primary))
+        .loupePanel()
+        .accessibilityLabel(isOff ? "Start annotating" : exitAccessibilityLabel)
+        // Small, and the only way out - so it must never be one of the touches the
+        // overlay passes through. See `InteractiveRegions.swift`.
+        .loupeInteractive()
+    }
+
+    private var exitTitle: String {
+        model.annotations.isEmpty ? "Done" : "Done · \(model.annotations.count)"
+    }
+
+    private var exitAccessibilityLabel: String {
+        switch model.annotations.count {
+        case 0: return "Finish annotating"
+        case 1: return "Finish annotating, 1 note"
+        case let n: return "Finish annotating, \(n) notes"
+        }
     }
 
     @ViewBuilder
@@ -99,14 +160,22 @@ public struct OverlayRoot: View {
 
     @ViewBuilder
     private func tray(in size: CGSize, insets: EdgeInsets) -> some View {
-        // The full tray belongs to browsing. While you are picking it would cover
-        // part of the app, and anything under it could not be pointed at - which is
-        // the one thing this tool must never take away.
+        // No tray at all while picking or commenting. The one-line bar that used to
+        // sit here was not merely visually in the way: once it registered an
+        // interactive region it *took* every touch that landed on it, so anything
+        // underneath became unpickable - the exact thing this file's own comment
+        // said must never happen. Reported by someone who could not annotate the
+        // trailing edge of his own app.
+        if case .browsing = model.mode {
+            trayPanel(in: size, insets: insets)
+        }
+    }
+
+    @ViewBuilder
+    private func trayPanel(in size: CGSize, insets: EdgeInsets) -> some View {
         let panel = TrayPanel(model: model,
-                              compact: model.mode != .browsing,
                               sheet: isCompact,
-                              safeBottom: insets.bottom,
-                              onClose: { model.endAnnotating() })
+                              safeBottom: insets.bottom)
             .loupeInteractive()
 
         if isCompact {
