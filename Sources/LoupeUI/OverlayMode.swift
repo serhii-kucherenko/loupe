@@ -5,15 +5,18 @@ import LoupeCore
 public struct PendingPick: Equatable, Sendable {
     public var ref: ElementRef
     public var screenshotPNG: Data?
+    public var contextScreenshotPNG: Data?
     /// 1-based, and it is what the badge shows. `DESIGN.md` requires the highlight
     /// never to be the only signal, so the number is part of the pick, not decoration.
     public var index: Int
     public var screen: String?
     public var viewport: Rect?
 
-    public init(ref: ElementRef, screenshotPNG: Data? = nil, index: Int,
+    public init(ref: ElementRef, screenshotPNG: Data? = nil,
+                contextScreenshotPNG: Data? = nil, index: Int,
                 screen: String? = nil, viewport: Rect? = nil) {
-        self.ref = ref; self.screenshotPNG = screenshotPNG; self.index = index
+        self.ref = ref; self.screenshotPNG = screenshotPNG
+        self.contextScreenshotPNG = contextScreenshotPNG; self.index = index
         self.screen = screen; self.viewport = viewport
     }
 }

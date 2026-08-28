@@ -87,8 +87,9 @@ public enum ElementPicker {
     /// Renders the picked element on its own. Rendering the view directly is the
     /// crop: there is no rectangle maths to get wrong.
     ///
-    /// ponytail: tight crop only. If the agent turns out to need surroundings, add a
-    /// second full-screen shot with the bounds drawn on it rather than padding this one.
+    /// This answers "what is this element". `contextPNG` answers "where is it, and
+    /// what is around it", which is a different question - so both are kept rather
+    /// than one being padded until it half-answers both.
     @MainActor
     public static func screenshotPNG(of view: PlatformView) -> Data? {
         #if canImport(UIKit)
@@ -104,6 +105,62 @@ public enum ElementPicker {
         view.cacheDisplay(in: view.bounds, to: rep)
         return rep.representation(using: .png, properties: [:])
         #endif
+    }
+
+    /// The whole window, with the picked element outlined.
+    ///
+    /// The tight crop is the better picture of *the element*, but it strips every
+    /// clue about where the element sits and what it sits next to, and an agent
+    /// reasoning about a layout problem needs exactly that. The outline is what makes
+    /// the shot usable: without it, a full window is just a screenshot again.
+    @MainActor
+    public static func contextPNG(of view: PlatformView, in window: PlatformWindow) -> Data? {
+        #if canImport(UIKit)
+        guard let root = window.rootViewController?.view ?? window.subviews.first,
+              root.bounds.width > 0, root.bounds.height > 0 else { return nil }
+        let frame = view.convert(view.bounds, to: root)
+
+        let renderer = UIGraphicsImageRenderer(bounds: root.bounds)
+        return renderer.image { context in
+            root.drawHierarchy(in: root.bounds, afterScreenUpdates: true)
+            outline(frame, in: context.cgContext)
+        }.pngData()
+
+        #elseif canImport(AppKit)
+        guard let content = window.contentView,
+              content.bounds.width > 0, content.bounds.height > 0,
+              let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds)
+        else { return nil }
+
+        content.cacheDisplay(in: content.bounds, to: rep)
+
+        // AppKit hands back a bottom-left frame, and the bitmap is drawn the same
+        // way up, so no flip is needed here - unlike `boundsInWindow`, which
+        // normalises for the format.
+        let frame = view.convert(view.bounds, to: nil)
+
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        outline(frame, in: context.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
+
+        return rep.representation(using: .png, properties: [:])
+        #endif
+    }
+
+    /// `stroke.highlight` in `loupe.highlight`, the same outline the overlay draws.
+    private static func outline(_ frame: CGRect, in context: CGContext) {
+        let colour = LoupeTheme.Colors.highlight.light
+        context.setStrokeColor(red: colour.red, green: colour.green,
+                               blue: colour.blue, alpha: 1)
+        context.setLineWidth(LoupeTheme.Stroke.highlight)
+        let path = CGPath(roundedRect: frame.insetBy(dx: -1, dy: -1),
+                          cornerWidth: LoupeTheme.Radius.highlight,
+                          cornerHeight: LoupeTheme.Radius.highlight,
+                          transform: nil)
+        context.addPath(path)
+        context.strokePath()
     }
 
     // MARK: - Platform seams

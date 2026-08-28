@@ -84,6 +84,7 @@ public enum Loupe {
             tag: tag,
             element: picked.ref,
             screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
+            contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: window),
             trace: NetworkRecorder.shared.recent(),
             logs: LogRecorder.shared.recent(),
             screen: screen,

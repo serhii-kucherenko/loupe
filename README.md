@@ -102,10 +102,15 @@ to run and an agent with filesystem access can read them directly. On a device u
 
 ```
 ~/.loupe/Demo/<session-id>/
-├── bundle.json          the annotations, elements, traces, build info
-├── <annotation-id>.png  the element, cropped
+├── bundle.json                  the annotations, elements, traces, build info
+├── <annotation-id>.png          the element, cropped
+├── <annotation-id>-context.png  the whole window, element outlined
 └── <annotation-id>.png
 ```
+
+Two pictures, because they answer different questions: the crop says *what is this
+element*, the context shot says *where is it and what is around it*. A layout complaint
+needs the second, and one padded image half-answers both.
 
 Each annotation carries your comment, the element reference (accessibility id, label,
 class, CSS selector on the web, on-screen bounds), the recent network events, any error

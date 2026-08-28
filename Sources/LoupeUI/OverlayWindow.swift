@@ -137,6 +137,7 @@ public final class OverlayHost {
         let size = host.contentView?.bounds.size ?? .zero
         model.pick(picked.ref,
                    screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
+                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: host),
                    screen: host.title.isEmpty ? nil : host.title,
                    viewport: Rect(x: 0, y: 0, width: size.width, height: size.height))
     }
@@ -193,6 +194,7 @@ public final class OverlayHost {
                   let picked = ElementPicker.pick(at: point, in: host) else { return }
             model.pick(picked.ref,
                        screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
+                       contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: host),
                        viewport: Rect(x: 0, y: 0,
                                       width: host.bounds.width, height: host.bounds.height))
         })

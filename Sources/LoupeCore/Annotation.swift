@@ -84,6 +84,9 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
     public var element: ElementRef
     /// PNG of the element, cropped to `element.bounds`. The agent reads this.
     public var screenshotPNG: Data?
+    /// PNG of the whole window with the element outlined. Answers "where is it and
+    /// what is around it", which the tight crop deliberately does not.
+    public var contextScreenshotPNG: Data?
     /// Requests that fired shortly before the pick.
     public var trace: [NetworkEvent]
     /// Log lines the host app produced shortly before the pick. Errors here are
@@ -102,6 +105,7 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
         tag: AnnotationTag? = nil,
         element: ElementRef,
         screenshotPNG: Data? = nil,
+        contextScreenshotPNG: Data? = nil,
         trace: [NetworkEvent] = [],
         logs: [LogEvent] = [],
         screen: String? = nil,
@@ -110,6 +114,7 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.id = id; self.comment = comment; self.tag = tag
         self.element = element; self.screenshotPNG = screenshotPNG
+        self.contextScreenshotPNG = contextScreenshotPNG
         self.trace = trace; self.logs = logs
         self.screen = screen; self.viewport = viewport
         self.capturedAt = capturedAt
@@ -125,6 +130,7 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
         tag = try c.decodeIfPresent(AnnotationTag.self, forKey: .tag)
         element = try c.decode(ElementRef.self, forKey: .element)
         screenshotPNG = try c.decodeIfPresent(Data.self, forKey: .screenshotPNG)
+        contextScreenshotPNG = try c.decodeIfPresent(Data.self, forKey: .contextScreenshotPNG)
         trace = try c.decodeIfPresent([NetworkEvent].self, forKey: .trace) ?? []
         logs = try c.decodeIfPresent([LogEvent].self, forKey: .logs) ?? []
         screen = try c.decodeIfPresent(String.self, forKey: .screen)

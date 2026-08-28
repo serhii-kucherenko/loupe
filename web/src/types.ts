@@ -54,8 +54,17 @@ export interface Annotation {
   comment: string;
   tag?: AnnotationTag;
   element: ElementRef;
-  /** base64 PNG. Absent when no picture could be taken; see `capture.ts`. */
+  /** base64 PNG of the element. Absent when no picture could be taken; see `capture.ts`. */
   screenshotPNG?: string;
+  /**
+   * base64 PNG of the whole window with the element outlined.
+   *
+   * Apple platforms only. The browser has no way to photograph a page it is
+   * rendering, and the `foreignObject` route used for the crop does not scale to a
+   * whole document. Declared here so a consumer written against these types can read
+   * an Apple bundle.
+   */
+  contextScreenshotPNG?: string;
   trace?: NetworkEvent[];
   logs?: LogEvent[];
   screen?: string;

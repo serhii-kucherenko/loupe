@@ -118,13 +118,11 @@ struct AnnotationCard: View {
                 }
             }
 
-            // On disk the PNG sits beside the JSON, named by annotation id.
-            if let image = NSImage(contentsOf: folder.appendingPathComponent("\(annotation.id.uuidString).png")) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 420, maxHeight: 200, alignment: .leading)
-                    .border(Color.secondary.opacity(0.3))
+            // On disk the PNGs sit beside the JSON, named by annotation id. Two
+            // pictures, two questions: what is this, and where does it sit.
+            HStack(alignment: .top, spacing: 12) {
+                picture("\(annotation.id.uuidString).png", caption: "the element")
+                picture("\(annotation.id.uuidString)-context.png", caption: "in place")
             }
 
             field("element", elementSummary)
@@ -148,6 +146,20 @@ struct AnnotationCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.secondary.opacity(0.06))
         .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func picture(_ name: String, caption: String) -> some View {
+        if let image = NSImage(contentsOf: folder.appendingPathComponent(name)) {
+            VStack(alignment: .leading, spacing: 2) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 260, maxHeight: 180, alignment: .leading)
+                    .border(Color.secondary.opacity(0.3))
+                Text(caption).font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var elementSummary: String {

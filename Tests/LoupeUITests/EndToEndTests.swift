@@ -66,6 +66,7 @@ final class EndToEndTests: XCTestCase {
 
         model.pick(picked.ref,
                    screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
+                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: window),
                    screen: window.title,
                    viewport: Rect(x: 0, y: 0, width: 600, height: 400))
         model.saveComment("clearing the search leaves the old results on screen", tag: .bug)
@@ -114,6 +115,14 @@ final class EndToEndTests: XCTestCase {
         XCTAssertEqual(image?.size.width ?? 0, 300, accuracy: 1,
                        "the crop is the card, not the label inside it")
         XCTAssertEqual(image?.size.height ?? 0, 80, accuracy: 1)
+
+        // And the second picture, which answers the other question.
+        let context = try Data(contentsOf:
+            folder.appendingPathComponent("\(annotation.id.uuidString)-context.png"))
+        let whole = NSImage(data: context)
+        XCTAssertEqual(whole?.size.width ?? 0, 600, accuracy: 1,
+                       "the context shot is the window, not the element")
+        XCTAssertEqual(whole?.size.height ?? 0, 400, accuracy: 1)
     }
 
     /// The other half of what makes the tool usable: one tray, several screens.

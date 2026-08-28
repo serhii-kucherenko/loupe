@@ -62,9 +62,11 @@ public final class OverlayModel: ObservableObject {
 
     /// The person clicked an element. Pins it and opens the popover.
     public func pick(_ ref: ElementRef, screenshotPNG: Data? = nil,
+                     contextScreenshotPNG: Data? = nil,
                      screen: String? = nil, viewport: Rect? = nil) {
         guard case .picking = mode else { return }
         set(.commenting(PendingPick(ref: ref, screenshotPNG: screenshotPNG,
+                                    contextScreenshotPNG: contextScreenshotPNG,
                                     index: annotations.count + 1,
                                     screen: screen, viewport: viewport)))
     }
@@ -89,6 +91,7 @@ public final class OverlayModel: ObservableObject {
             tag: tag,
             element: pick.ref,
             screenshotPNG: pick.screenshotPNG,
+            contextScreenshotPNG: pick.contextScreenshotPNG,
             trace: NetworkRecorder.shared.recent(),
             logs: LogRecorder.shared.recent(),
             screen: pick.screen,

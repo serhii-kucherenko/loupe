@@ -4,97 +4,249 @@
   "title": "Loupe annotation bundle",
   "description": "What one Send produces. The contract between any Loupe SDK and anything that consumes bundles.",
   "type": "object",
-  "required": ["formatVersion", "sessionID", "app", "annotations", "sentAt"],
+  "required": [
+    "formatVersion",
+    "sessionID",
+    "app",
+    "annotations",
+    "sentAt"
+  ],
   "additionalProperties": true,
   "properties": {
-    "formatVersion": { "type": "integer", "const": 1 },
-    "sessionID": { "type": "string", "description": "UUID. One tray, one id, stable across an app restart." },
-    "sentAt": { "type": "string", "format": "date-time" },
-    "app": { "$ref": "#/$defs/appInfo" },
-    "annotations": { "type": "array", "items": { "$ref": "#/$defs/annotation" } }
+    "formatVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "UUID. One tray, one id, stable across an app restart."
+    },
+    "sentAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "app": {
+      "$ref": "#/$defs/appInfo"
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation"
+      }
+    }
   },
   "$defs": {
     "appInfo": {
       "type": "object",
-      "required": ["name", "platform"],
+      "required": [
+        "name",
+        "platform"
+      ],
       "additionalProperties": true,
       "properties": {
-        "name": { "type": "string" },
-        "version": { "type": "string" },
-        "commitSHA": { "type": "string", "description": "So the agent checks out the right code." },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "commitSHA": {
+          "type": "string",
+          "description": "So the agent checks out the right code."
+        },
         "platform": {
           "type": "string",
           "description": "Free-form, but use one of the known values where it fits.",
-          "examples": ["macOS", "iOS", "iPadOS", "web", "electron"]
+          "examples": [
+            "macOS",
+            "iOS",
+            "iPadOS",
+            "web",
+            "electron"
+          ]
         },
-        "environment": { "type": "string", "default": "staging" }
+        "environment": {
+          "type": "string",
+          "default": "staging"
+        }
       }
     },
     "rect": {
       "type": "object",
-      "required": ["x", "y", "width", "height"],
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
       "properties": {
-        "x": { "type": "number" }, "y": { "type": "number" },
-        "width": { "type": "number" }, "height": { "type": "number" }
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
       }
     },
     "elementRef": {
       "type": "object",
       "description": "Where the annotation points. Every field but bounds is best-effort: the crop plus the trace carry the meaning, so a missing field degrades quality, never correctness.",
-      "required": ["bounds"],
+      "required": [
+        "bounds"
+      ],
       "additionalProperties": true,
       "properties": {
-        "accessibilityID": { "type": "string" },
-        "label": { "type": "string" },
-        "className": { "type": "string" },
-        "selector": { "type": "string", "description": "CSS selector. Web and Electron only." },
-        "sourceFile": { "type": "string" },
-        "sourceLine": { "type": "integer" },
-        "bounds": { "$ref": "#/$defs/rect", "description": "In viewport coordinates." }
+        "accessibilityID": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "className": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string",
+          "description": "CSS selector. Web and Electron only."
+        },
+        "sourceFile": {
+          "type": "string"
+        },
+        "sourceLine": {
+          "type": "integer"
+        },
+        "bounds": {
+          "$ref": "#/$defs/rect",
+          "description": "In viewport coordinates."
+        }
       }
     },
     "networkEvent": {
       "type": "object",
-      "required": ["method", "url", "durationMs", "at"],
+      "required": [
+        "method",
+        "url",
+        "durationMs",
+        "at"
+      ],
       "additionalProperties": true,
       "properties": {
-        "method": { "type": "string" },
-        "url": { "type": "string" },
-        "statusCode": { "type": ["integer", "null"] },
-        "durationMs": { "type": "integer" },
-        "at": { "type": "string", "format": "date-time" }
+        "method": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "statusCode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "logEvent": {
       "type": "object",
-      "required": ["level", "message", "at"],
+      "required": [
+        "level",
+        "message",
+        "at"
+      ],
       "additionalProperties": true,
       "properties": {
-        "level": { "enum": ["debug", "info", "warning", "error"] },
-        "message": { "type": "string" },
-        "subsystem": { "type": "string" },
-        "at": { "type": "string", "format": "date-time" }
+        "level": {
+          "enum": [
+            "debug",
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "subsystem": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "annotation": {
       "type": "object",
-      "required": ["id", "comment", "element", "capturedAt"],
+      "required": [
+        "id",
+        "comment",
+        "element",
+        "capturedAt"
+      ],
       "additionalProperties": true,
       "properties": {
-        "id": { "type": "string", "description": "UUID. Also the screenshot filename on disk." },
-        "comment": { "type": "string" },
-        "tag": { "enum": ["bug", "idea", "polish", "question"] },
-        "element": { "$ref": "#/$defs/elementRef" },
+        "id": {
+          "type": "string",
+          "description": "UUID. Also the screenshot filename on disk."
+        },
+        "comment": {
+          "type": "string"
+        },
+        "tag": {
+          "enum": [
+            "bug",
+            "idea",
+            "polish",
+            "question"
+          ]
+        },
+        "element": {
+          "$ref": "#/$defs/elementRef"
+        },
         "screenshotPNG": {
           "type": "string",
           "contentEncoding": "base64",
           "description": "Only over HTTP. On disk the PNG sits beside the JSON as <id>.png and this field is absent."
         },
-        "trace": { "type": "array", "items": { "$ref": "#/$defs/networkEvent" } },
-        "logs": { "type": "array", "items": { "$ref": "#/$defs/logEvent" } },
-        "screen": { "type": "string" },
-        "viewport": { "$ref": "#/$defs/rect" },
-        "capturedAt": { "type": "string", "format": "date-time" }
+        "trace": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/networkEvent"
+          }
+        },
+        "logs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/logEvent"
+          }
+        },
+        "screen": {
+          "type": "string"
+        },
+        "viewport": {
+          "$ref": "#/$defs/rect"
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contextScreenshotPNG": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "The whole window with the element outlined. Only over HTTP; on disk it sits beside the JSON as <id>-context.png. Apple platforms only - the web SDK has no way to take one."
+        }
       }
     }
   }

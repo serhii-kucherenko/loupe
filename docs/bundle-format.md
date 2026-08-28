@@ -38,7 +38,8 @@ Two transports, two shapes. Same JSON either way.
 ```
 ~/.loupe/<app-name>/<sessionID>/
 ├── bundle.json
-├── <annotation-id>.png     the element, cropped
+├── <annotation-id>.png             the element, cropped
+├── <annotation-id>-context.png     the whole window, element outlined
 └── <annotation-id>.png
 ```
 
@@ -50,7 +51,12 @@ application/json`. Here `screenshotPNG` **is** present, base64-encoded, because 
 no folder to put it in.
 
 An agent reading a bundle must handle both: *if `screenshotPNG` is present use it,
-otherwise look for `<id>.png` next to the JSON.*
+otherwise look for `<id>.png` next to the JSON.* Same rule for the context shot and
+`<id>-context.png`.
+
+**Two pictures, two questions.** The crop answers *what is this element*; the context shot
+answers *where is it and what is around it*. A layout complaint needs the second, and a
+single padded image half-answers both. Either may be absent.
 
 ## Fields
 
@@ -82,7 +88,8 @@ otherwise look for `<id>.png` next to the JSON.*
 | `comment` | string | yes | What the person typed. The only human-authored field in the bundle. |
 | `tag` | enum | no | `bug`, `idea`, `polish`, `question`. A hint for triage, not the final word. |
 | `element` | object | yes | Where it points. |
-| `screenshotPNG` | base64 | no | Present over HTTP, absent on disk. See above. |
+| `screenshotPNG` | base64 | no | The element, cropped. Present over HTTP, absent on disk. See above. |
+| `contextScreenshotPNG` | base64 | no | The whole window with the element outlined. Answers "where is it and what is around it", which the tight crop deliberately does not. Apple platforms only; the web SDK cannot take one. |
 | `trace` | array | no | Requests that fired shortly before the pick. Absent means none were recorded, never that none happened. |
 | `logs` | array | no | Log lines from shortly before the pick. Errors are kept preferentially over debug chatter. |
 | `screen` | string | no | Route, screen name or tab, e.g. `/search`. |
@@ -158,6 +165,9 @@ for a in bundle["annotations"]:
   where secrets live, and a URL is enough to find the endpoint in source.
 - **No full page source.** The element reference plus a crop, not a DOM dump.
 - **No video.** Stills only.
+- **No picture at all, sometimes.** Both image fields are optional. The web SDK often
+  cannot take one (a cross-origin image taints the canvas), and it carries the element
+  reference and the trace instead. Missing pictures degrade quality, never correctness.
 
 If you need any of that, it belongs in your own intake service, added on top - not in the
 format everybody else has to trust.

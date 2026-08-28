@@ -119,3 +119,66 @@ final class BundleFormatTests: XCTestCase {
         XCTAssertEqual(written.formatVersion, 1)
     }
 }
+
+/// Two pictures, two questions, and both optional. Added in the same change as the
+/// field itself, so the doc and the on-disk layout cannot drift apart.
+extension BundleFormatTests {
+
+    func testTheContextShotIsWrittenBesideTheCropAndNamedForIt() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let annotation = Annotation(
+            comment: "the row sits too close to the header",
+            element: ElementRef(bounds: Rect(x: 0, y: 0, width: 4, height: 4)),
+            screenshotPNG: Data([0x89, 0x50, 0x4E, 0x47]),
+            contextScreenshotPNG: Data([0x89, 0x50, 0x4E, 0x47, 0x0D]))
+        let bundle = AnnotationBundle(sessionID: UUID(),
+                                      app: AppInfo(name: "Demo", platform: "macOS"),
+                                      annotations: [annotation])
+
+        try await FileTransport(directory: directory).send(bundle)
+
+        let folder = directory.appendingPathComponent(bundle.sessionID.uuidString)
+        let id = annotation.id.uuidString
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: folder.appendingPathComponent("\(id).png").path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: folder.appendingPathComponent("\(id)-context.png").path))
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let written = try decoder.decode(
+            AnnotationBundle.self,
+            from: Data(contentsOf: folder.appendingPathComponent("bundle.json")))
+        XCTAssertNil(written.annotations[0].screenshotPNG)
+        XCTAssertNil(written.annotations[0].contextScreenshotPNG,
+                     "on disk the bytes live in the pngs, not in the json")
+    }
+
+    func testABundleWithNeitherPictureIsStillValid() throws {
+        let noPictures = """
+        {
+          "formatVersion": 1,
+          "sessionID": "6F9619FF-8B86-D011-B42D-00CF4FC964FF",
+          "sentAt": "2026-08-27T10:00:00Z",
+          "app": { "name": "Web", "platform": "web" },
+          "annotations": [{
+            "id": "1D2C3B4A-0000-4000-8000-000000000001",
+            "comment": "a cross-origin image tainted the canvas",
+            "capturedAt": "2026-08-27T09:59:00Z",
+            "element": { "selector": "main > .grid", "bounds": { "x": 0, "y": 0, "width": 8, "height": 8 } }
+          }]
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let bundle = try decoder.decode(AnnotationBundle.self, from: noPictures)
+        XCTAssertNil(bundle.annotations[0].screenshotPNG)
+        XCTAssertNil(bundle.annotations[0].contextScreenshotPNG)
+        XCTAssertEqual(bundle.annotations[0].element.selector, "main > .grid",
+                       "the reference still carries the annotation")
+    }
+}

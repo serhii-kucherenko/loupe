@@ -50,10 +50,15 @@ public struct FileTransport: Transport {
         // readable and an agent can open the images directly.
         var stripped = bundle
         for i in stripped.annotations.indices {
-            guard let png = stripped.annotations[i].screenshotPNG else { continue }
-            let name = "\(stripped.annotations[i].id.uuidString).png"
-            try png.write(to: folder.appendingPathComponent(name))
-            stripped.annotations[i].screenshotPNG = nil
+            let id = stripped.annotations[i].id.uuidString
+            if let png = stripped.annotations[i].screenshotPNG {
+                try png.write(to: folder.appendingPathComponent("\(id).png"))
+                stripped.annotations[i].screenshotPNG = nil
+            }
+            if let context = stripped.annotations[i].contextScreenshotPNG {
+                try context.write(to: folder.appendingPathComponent("\(id)-context.png"))
+                stripped.annotations[i].contextScreenshotPNG = nil
+            }
         }
 
         let encoder = JSONEncoder()
