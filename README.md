@@ -66,7 +66,9 @@ Requires Swift 5.9, macOS 13, or iOS 16.
 npm install loupe-web
 ```
 
-See [`web/README.md`](web/README.md). Electron comes free: its renderer is Chromium.
+[![npm](https://img.shields.io/npm/v/loupe-web)](https://www.npmjs.com/package/loupe-web)
+No runtime dependencies. See [`web/README.md`](web/README.md). Electron comes free: its
+renderer is Chromium.
 
 ## Use
 

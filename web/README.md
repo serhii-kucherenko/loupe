@@ -14,6 +14,8 @@ No runtime dependencies.
 npm install loupe-web
 ```
 
+[![npm](https://img.shields.io/npm/v/loupe-web)](https://www.npmjs.com/package/loupe-web)
+
 ## Use
 
 One call, in dev and staging builds only:
