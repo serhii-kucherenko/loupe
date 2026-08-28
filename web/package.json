@@ -1,0 +1,41 @@
+{
+  "name": "@loupe/web",
+  "version": "0.1.0",
+  "description": "Point at your running web app, say what is wrong, and an agent gets everything it needs.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "sync-tokens": "node scripts/sync-tokens.mjs",
+    "test": "npm run sync-tokens && tsc && node --test \"dist/test/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^22.10.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2"
+  },
+  "keywords": [
+    "annotation",
+    "bug-report",
+    "ai-agent",
+    "feedback",
+    "screenshot"
+  ]
+}

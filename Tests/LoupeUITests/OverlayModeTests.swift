@@ -2,7 +2,7 @@ import XCTest
 import LoupeCore
 @testable import LoupeUI
 
-private final class SpyTransport: Transport, @unchecked Sendable {
+final class SpyTransport: Transport, @unchecked Sendable {
     var shouldFail = false
     var sent: [AnnotationBundle] = []
     func send(_ bundle: AnnotationBundle) async throws {
@@ -11,7 +11,7 @@ private final class SpyTransport: Transport, @unchecked Sendable {
     }
 }
 
-private func ref(_ id: String) -> ElementRef {
+func ref(_ id: String) -> ElementRef {
     ElementRef(accessibilityID: id, bounds: Rect(x: 0, y: 0, width: 40, height: 20))
 }
 
@@ -234,5 +234,51 @@ final class OverlayModeTests: XCTestCase {
         await model.drainPending()
         XCTAssertEqual(model.pendingCount, 0)
         XCTAssertEqual(model.sendState, .idle)
+    }
+}
+
+/// The tray must never be the reason part of the app cannot be pointed at.
+@MainActor
+final class TrayVisibilityTests: XCTestCase {
+
+    private func makeModel() -> OverlayModel {
+        OverlayModel(session: AnnotationSession(
+            app: AppInfo(name: "Demo", platform: "macOS"), transport: SpyTransport()))
+    }
+
+    func testTheFullTrayBelongsToBrowsingOnly() {
+        let model = makeModel()
+        model.beginAnnotating()
+        model.pick(ref("a"))
+        model.saveComment("one", tag: nil)
+        XCTAssertEqual(model.mode, .browsing, "after a save you are reviewing")
+
+        model.resumePicking()
+        XCTAssertEqual(model.mode, .picking(hover: nil),
+                       "and while picking the page must be reachable again")
+    }
+
+    func testReviewOpensTheTrayFromTheCompactBar() {
+        let model = makeModel()
+        model.beginAnnotating()
+        model.pick(ref("a"))
+        model.saveComment("one", tag: nil)
+        model.resumePicking()
+
+        model.review()
+        XCTAssertEqual(model.mode, .browsing)
+    }
+
+    func testReviewDoesNothingFromAnywhereElse() {
+        let model = makeModel()
+        model.review()
+        XCTAssertEqual(model.mode, .off)
+
+        model.beginAnnotating()
+        model.pick(ref("a"))
+        model.review()
+        guard case .commenting = model.mode else {
+            return XCTFail("review must not interrupt a comment being typed")
+        }
     }
 }

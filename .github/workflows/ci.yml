@@ -47,3 +47,27 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
+
+  web:
+    name: Build and test (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      # Also fails if docs/tokens.json and the generated copy have drifted: a token
+      # that means two things on two platforms is worse than no token at all.
+      - name: Test
+        run: npm test
+
+      - name: The generated tokens are committed and current
+        run: git diff --exit-code src/tokens.generated.ts

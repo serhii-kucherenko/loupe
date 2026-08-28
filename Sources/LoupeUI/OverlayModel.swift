@@ -100,6 +100,12 @@ public final class OverlayModel: ObservableObject {
         return annotation
     }
 
+    /// From the compact bar: open the full tray to read or send what is there.
+    public func review() {
+        guard case .picking = mode else { return }
+        set(.browsing)
+    }
+
     /// From the tray: go pick another element.
     public func resumePicking() {
         guard mode == .browsing else { return }
@@ -140,6 +146,9 @@ public final class OverlayModel: ObservableObject {
         } catch {
             pendingCount = queue?.pendingCount ?? 0
             sendState = .failed(message(for: error))
+            // The tray is where the failure is readable and where Try again lives,
+            // so a failed send always ends up there, wherever it started from.
+            set(.browsing)
         }
     }
 

@@ -76,7 +76,12 @@ public struct OverlayRoot: View {
 
     @ViewBuilder
     private func tray(in size: CGSize) -> some View {
-        let panel = TrayPanel(model: model, onClose: { model.endAnnotating() })
+        // The full tray belongs to browsing. While you are picking it would cover
+        // part of the app, and anything under it could not be pointed at - which is
+        // the one thing this tool must never take away.
+        let panel = TrayPanel(model: model,
+                              compact: model.mode != .browsing,
+                              onClose: { model.endAnnotating() })
 
         if isCompact {
             VStack {

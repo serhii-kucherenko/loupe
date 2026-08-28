@@ -23,6 +23,9 @@ extension Image {
 /// centre is where the app being annotated lives.
 struct TrayPanel: View {
     @ObservedObject var model: OverlayModel
+    /// One line rather than a panel. True while picking, so the page underneath
+    /// stays reachable, and whenever there is nothing to show yet.
+    var compact: Bool = false
     var onClose: () -> Void
 
     @FocusState private var sendFocused: Bool
@@ -31,28 +34,39 @@ struct TrayPanel: View {
     static let width: CGFloat = 340
 
     var body: some View {
-        // With nothing picked yet, the tray is a one-line bar. A full-height panel
-        // saying "0 notes" and offering to send them would be competing with the
-        // popover for attention while someone is trying to type into it.
-        if model.annotations.isEmpty {
-            emptyBar
+        // A full-height panel saying "0 notes" and offering to send them would also
+        // be competing with the popover for attention while someone types into it.
+        if compact || model.annotations.isEmpty {
+            bar
         } else {
             full
         }
     }
 
-    private var emptyBar: some View {
+    private var bar: some View {
         HStack(spacing: LoupeTheme.Space.sm) {
-            Text("Point at something that looks wrong.")
+            Text(barTitle)
                 .font(LoupeTheme.Typography.body)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
             Spacer()
+            if !model.annotations.isEmpty, model.mode == .picking(hover: nil) || model.mode == .browsing {
+                Button("Review") { model.review() }
+                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
+            }
             closeButton
         }
         .padding(.horizontal, LoupeTheme.Space.md)
         .padding(.vertical, LoupeTheme.Space.sm)
         .frame(width: Self.width)
         .loupePanel()
+    }
+
+    private var barTitle: String {
+        switch model.annotations.count {
+        case 0: return "Point at something that looks wrong."
+        case 1: return "1 note · point at another"
+        case let n: return "\(n) notes · point at another"
+        }
     }
 
     private var full: some View {

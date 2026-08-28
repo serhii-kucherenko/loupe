@@ -6,13 +6,35 @@ The ordered list of work lives in the [Linear project](https://linear.app/serhii
 Do not create a ROADMAP.md or a plans directory here: two lists mean two truths and both rot.
 
 ## What this is
-An annotation SDK compiled into the dev/staging build of a host app. Apple platforms first
-(macOS, iPad, iPhone). Open source, MIT. It is meant to be adopted by other people's apps,
-so the public API is a contract: additive changes only, no breaking renames without a major.
+An annotation SDK compiled into the dev/staging build of a host app. **Two SDKs, one
+format**: Swift for macOS/iPad/iPhone, TypeScript in `web/` for the browser and Electron.
+Open source, MIT. It is meant to be adopted by other people's apps, so the public API is a
+contract: additive changes only, no breaking renames without a major.
+
+## Layout
+| Path | What |
+|---|---|
+| `Sources/LoupeCore` | the bundle model, recorders, transports. No UIKit, no AppKit. |
+| `Sources/LoupeUI` | the picker, the theme, the overlay. Every platform seam lives here. |
+| `web/` | the TypeScript SDK. Its own package, its own tests. |
+| `Examples/LoupeDemo` | the seeded two-role demo, plus the snapshot renderer. |
+| `docs/bundle-format.md` | the contract between the SDKs and anything that reads bundles. |
+| `docs/tokens.json` | `DESIGN.md`, machine-readable. Both SDKs are tested against it. |
 
 ## Rules
 - `LoupeCore` stays free of UIKit and AppKit. It is the testable half; keep it that way.
 - `LoupeUI` holds every platform seam, behind `#if canImport(...)`.
-- Visible UI follows `DESIGN.md`. A new token goes in that file in the same change.
-- Non-trivial logic leaves one runnable test behind. `swift test` must pass before any commit.
-- The picker's meaningful-ancestor walk is the correctness core. Changes there need a test.
+- Visible UI follows `DESIGN.md`. A new token goes in that file **and** `docs/tokens.json`
+  in the same change, then `cd web && npm run sync-tokens`. A token that means two things
+  on two platforms is worse than no token at all, and CI fails on the drift.
+- The bundle format is a contract. Adding a field is safe; renaming or removing one is not.
+  Decoders are hand-written on the Swift side precisely so an older bundle still reads.
+- Non-trivial logic leaves one runnable test behind. `swift test` and `cd web && npm test`
+  must both pass before any commit.
+- The meaningful-ancestor walk is the correctness core, on both platforms. Changes there
+  need a test. Two bugs have already come out of it: AppKit's static labels are
+  `NSControl`s, and `elementFromPoint` retargets shadow content to the host.
+- Never use `instanceof` on DOM types in `web/`. An element inside an iframe is from
+  another realm and the check silently fails. Check `tagName` or duck-type instead.
+- After changing anything visible, re-run the snapshots and look at them:
+  `cd Examples/LoupeDemo && swift run LoupeSnapshots ../../docs/screenshots`.

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northgate Supply — staging</title>
+<style>
+  /* Deliberately plain, and sharing nothing with DESIGN.md. The overlay has to read
+     as a tool on top of someone else's product, and it cannot prove that against a
+     host that borrows its palette. */
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; background: Canvas; color: CanvasText; }
+  header { display: flex; gap: 16px; align-items: baseline;
+           padding: 16px 24px; border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
+  h1 { font-size: 18px; margin: 0; }
+  nav button { font: inherit; padding: 6px 12px; cursor: pointer; }
+  nav button[aria-current="true"] { font-weight: 700; }
+  /* `main` sets display, which otherwise beats the hidden attribute outright. */
+  [hidden] { display: none !important; }
+  main { padding: 24px; display: grid; gap: 32px; grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+  .row { display: flex; justify-content: space-between; gap: 12px;
+         padding: 10px 12px; border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+         border-bottom: 0; }
+  .row:last-child { border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent); }
+  .stock { font-variant-numeric: tabular-nums; opacity: 0.6; }
+  .empty { padding: 32px; text-align: center;
+           background: color-mix(in srgb, CanvasText 6%, transparent); }
+  .status { font-family: ui-monospace, monospace; font-size: 12px; opacity: 0.7; }
+  .error { color: crimson; font-size: 13px; }
+  input, button { font: inherit; padding: 6px 10px; }
+  .bundle { border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+            border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .bundle img { max-width: 320px; display: block; margin: 8px 0;
+                border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
+  .bundle dl { display: grid; grid-template-columns: 72px 1fr; gap: 2px 8px;
+               font-family: ui-monospace, monospace; font-size: 12px; margin: 8px 0 0; }
+  .bundle dt { opacity: 0.6; }
+  .bundle dd { margin: 0; overflow-wrap: anywhere; }
+  .hint { opacity: 0.6; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Northgate Supply</h1>
+  <span class="status">staging · <span id="build">…</span></span>
+  <nav>
+    <button id="tab-annotator" aria-current="true">Annotator</button>
+    <button id="tab-agent" aria-current="false">Agent inbox</button>
+  </nav>
+  <span class="hint" style="margin-left:auto">⌥⌘L (or Alt+Ctrl+L) to annotate</span>
+</header>
+
+<main id="annotator">
+  <section>
+    <h2>Stock</h2>
+    <p>
+      <input id="q" data-testid="search.field" placeholder="Search stock" value="wool">
+      <button id="search" data-testid="search.submit">Search</button>
+      <button id="clear" data-testid="search.clear">Clear</button>
+    </p>
+    <p class="status" data-testid="search.status" id="status"></p>
+    <div id="results" data-testid="search.results"></div>
+  </section>
+
+  <section>
+    <h2>Basket</h2>
+    <div class="empty" data-testid="cart.empty">
+      <div>Your basket is empty</div>
+      <div class="status">0 items</div>
+    </div>
+
+    <h2>Place an order</h2>
+    <p><input id="name" data-testid="order.name" placeholder="Customer name"></p>
+    <p><button id="order" data-testid="order.submit">Place order</button></p>
+    <p class="error" data-testid="order.error" id="order-error"></p>
+  </section>
+</main>
+
+<main id="agent" hidden style="grid-template-columns:1fr">
+  <section>
+    <h2>What an agent receives</h2>
+    <p class="hint">Everything sent from this page, decoded from the bundle format.</p>
+    <div id="inbox"></div>
+  </section>
+</main>
+
+<script type="module">
+import { start } from "../dist/src/index.js";
+
+/* The intake, for a demo with no server: it keeps bundles where the Agent tab can
+   read them. A real deployment points `endpoint` at its own intake instead. */
+const INBOX = "loupe:demo:inbox";
+const localIntake = {
+  async send(bundle) {
+    const all = JSON.parse(localStorage.getItem(INBOX) ?? "[]");
+    all.unshift(bundle);
+    localStorage.setItem(INBOX, JSON.stringify(all.slice(0, 20)));
+  },
+};
+
+const loupe = start({
+  app: { name: "Northgate Supply", version: "0.1.0", platform: "web", environment: "staging" },
+  transport: localIntake,
+  screen: () => location.hash || "/search",
+});
+document.getElementById("build").textContent = "loupe " + loupe.session.makeBundle().formatVersion;
+
+/* Seeded stock. Three things are wrong with this page on purpose. */
+const STOCK = [
+  { id: 1, name: "Blue canvas jacket", price: "£128.00", stock: 4 },
+  { id: 2, name: "Wool overshirt, ink", price: "£96.00", stock: 0 },
+  { id: 3, name: "Selvedge denim, 13oz", price: "£145.00", stock: 12 },
+  { id: 4, name: "Boiled wool cap", price: "£38.00", stock: 2 },
+  { id: 5, name: "Waxed cotton tote", price: "£64.00", stock: 7 },
+];
+
+/* A service worker would be a whole build step, so the demo answers its own fetches
+   here. They still go through window.fetch, which is what the recorder wraps, so the
+   captured trace is the page's real network activity. */
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = new URL(typeof input === "string" ? input : input.url, location.href);
+  if (!url.pathname.startsWith("/v2/")) return realFetch(input, init);
+
+  await new Promise((r) => setTimeout(r, 40 + Math.random() * 80));
+
+  if (url.pathname === "/v2/search") {
+    const q = url.searchParams.get("q") ?? "";
+    if (!q) {
+      return new Response(JSON.stringify({ error: "query must not be empty" }), { status: 500 });
+    }
+    const items = STOCK.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
+    return new Response(JSON.stringify({ items }), { status: 200 });
+  }
+  if (url.pathname === "/v2/cart") return new Response('{"items":[]}', { status: 200 });
+  if (url.pathname === "/v2/orders") {
+    return new Response(JSON.stringify({ error: "payment provider timed out" }), { status: 500 });
+  }
+  return new Response("{}", { status: 404 });
+};
+
+const results = document.getElementById("results");
+const status = document.getElementById("status");
+
+async function search(q) {
+  const response = await fetch(`/v2/search?q=${encodeURIComponent(q)}`);
+  status.textContent = `GET /v2/search?q=${q} → ${response.status}`;
+  if (!response.ok) {
+    /* The seeded bug: the stale page stays on screen after a failure. */
+    loupe.logs.error("kept the last good page after a " + response.status, "search");
+    return;
+  }
+  const { items } = await response.json();
+  results.innerHTML = items.map((p) => `
+    <div class="row" data-testid="row.${p.id}">
+      <span>${p.name}</span>
+      <span>${p.price} <span class="stock">${p.stock}</span></span>
+    </div>`).join("");
+}
+
+document.getElementById("search").onclick = () => search(document.getElementById("q").value);
+document.getElementById("clear").onclick = () => {
+  document.getElementById("q").value = "";
+  search("");
+};
+document.getElementById("order").onclick = async () => {
+  const response = await fetch("/v2/orders", { method: "POST" });
+  if (!response.ok) {
+    /* The second seeded problem: an error message that tells you nothing. */
+    document.getElementById("order-error").textContent = "Something went wrong.";
+    loupe.logs.error("POST /v2/orders → " + response.status + " payment provider timed out", "orders");
+  }
+};
+fetch("/v2/cart");
+search("wool");
+
+/* The second role. */
+function renderInbox() {
+  const bundles = JSON.parse(localStorage.getItem(INBOX) ?? "[]");
+  const inbox = document.getElementById("inbox");
+  if (!bundles.length) {
+    inbox.innerHTML = `<p class="hint">Nothing received yet. Annotate something and press Send.</p>`;
+    return;
+  }
+  inbox.innerHTML = bundles.map((bundle) => bundle.annotations.map((a) => `
+    <div class="bundle">
+      <strong>${escape(a.comment)}</strong> ${a.tag ? `<em>${a.tag}</em>` : ""}
+      ${a.screenshotPNG ? `<img alt="" src="data:image/png;base64,${a.screenshotPNG}">` : ""}
+      <dl>
+        <dt>element</dt><dd>${escape(a.element.accessibilityID ?? a.element.selector ?? "")}</dd>
+        <dt>screen</dt><dd>${escape(a.screen ?? "")}</dd>
+        <dt>build</dt><dd>${escape(bundle.app.name)} ${escape(bundle.app.version ?? "")}</dd>
+        <dt>trace</dt><dd>${(a.trace ?? []).map((t) =>
+          `${t.method} ${new URL(t.url, location.href).pathname} → ${t.statusCode}`).join("<br>") || "—"}</dd>
+        <dt>logs</dt><dd>${(a.logs ?? []).map((l) =>
+          `[${l.level}] ${escape(l.message)}`).join("<br>") || "—"}</dd>
+      </dl>
+    </div>`).join("")).join("");
+}
+const escape = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/* Drives the overlay into one state and stops, so a headless browser can take the
+   same three pictures the Swift snapshot tool takes. Nothing here runs unless the
+   URL asks for it. */
+const scene = new URLSearchParams(location.search).get("state");
+if (scene) {
+  const row = () => document.querySelector('[data-testid="row.2"]') ?? document.querySelector(".row");
+  const rect = (el) => { const b = el.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; };
+  setTimeout(async () => {
+    loupe.overlay.begin();
+    if (scene === "hover") {
+      const [x, y] = rect(row());
+      document.dispatchEvent(new MouseEvent("mousemove", { clientX: x, clientY: y, bubbles: true }));
+    }
+    if (scene === "comment" || scene === "tray") {
+      const [x, y] = rect(row());
+      await loupe.overlay.pickAt(x, y);
+    }
+    if (scene === "tray") {
+      const field = document.querySelector("loupe-overlay").shadowRoot.querySelector("textarea");
+      field.value = "clearing the search leaves the old results on screen";
+      field.dispatchEvent(new Event("input"));
+      loupe.overlay.saveComment();
+      loupe.overlay.resumePicking();
+      const empty = document.querySelector('[data-testid="cart.empty"]');
+      const [ex, ey] = rect(empty);
+      await loupe.overlay.pickAt(ex, ey);
+      const second = document.querySelector("loupe-overlay").shadowRoot.querySelector("textarea");
+      second.value = "the empty basket gives you nowhere to go from here";
+      second.dispatchEvent(new Event("input"));
+      loupe.overlay.saveComment();
+    }
+    document.title = "ready";
+  }, 300);
+}
+
+for (const [id, show] of [["tab-annotator", "annotator"], ["tab-agent", "agent"]]) {
+  document.getElementById(id).onclick = () => {
+    document.getElementById("annotator").hidden = show !== "annotator";
+    document.getElementById("agent").hidden = show !== "agent";
+    document.getElementById("tab-annotator").ariaCurrent = String(show === "annotator");
+    document.getElementById("tab-agent").ariaCurrent = String(show === "agent");
+    if (show === "agent") renderInbox();
+  };
+}
+</script>
+</body>
+</html>
