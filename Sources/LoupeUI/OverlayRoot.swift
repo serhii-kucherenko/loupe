@@ -129,7 +129,13 @@ public struct OverlayRoot: View {
         .accessibilityHint("Slides the notes panel in and out")
         .loupeInteractive()
         .position(x: pullX(in: size), y: pullY(in: size))
-        .gesture(
+        // High priority, not a plain `.gesture`. The pull is a `Button`, and a
+        // button's own tap recogniser will otherwise win a race it should lose: a
+        // quick flick was swallowed roughly half the time, which is exactly the
+        // gesture someone makes when they want the thing out of the way *now*.
+        // Below the minimum distance nothing here fires at all, so the tap still
+        // works.
+        .highPriorityGesture(
             // Has to travel before it counts, or a tap on the pull would be read as
             // the beginning of a move.
             DragGesture(minimumDistance: LoupeTheme.Space.md)

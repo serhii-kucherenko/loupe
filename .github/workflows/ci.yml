@@ -98,7 +98,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
   ipad:
-    name: Build the demo app (iPad and iPhone)
+    name: Build the demo app, and touch it (iPad and iPhone)
     # Not macos-14 like the other Apple jobs. XcodeGen writes the newest project
     # format it knows and offers no way to pin an older one, so the generated
     # project cannot be opened by the Xcode on that image at all
@@ -130,11 +130,37 @@ jobs:
         working-directory: Examples/LoupeDemoApp
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild build-for-testing \
             -project LoupeDemo.xcodeproj \
             -scheme LoupeDemo \
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO | xcpretty
+
+      # The only tests that touch the overlay with a finger.
+      #
+      # Everything else drives the model, which proves the model and nothing else -
+      # and the overlay's own controls were once completely untappable on iOS with a
+      # fully green suite, because a `UIHostingController` is one `UIView` and "does
+      # the touch arrive" is a question no unit test can ask. The drawer's pull then
+      # failed the same way: the drag worked about half the time, because a `Button`
+      # tap recogniser was winning a race it should lose.
+      #
+      # A concrete device, unlike the build above, because a test has to run
+      # somewhere. Matching the UDID rather than the name: the model suffix is part
+      # of the name, so "iPad Pro 11-inch (M4)" gets cut at the bracket and matches
+      # nothing.
+      - name: Touch the overlay on an iPad
+        working-directory: Examples/LoupeDemoApp
+        run: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -m1 'iPad' | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')
+          test -n "$DEVICE" || { echo "no iPad simulator on this image"; exit 1; }
+          echo "using $DEVICE"
+          xcodebuild test-without-building \
+            -project LoupeDemo.xcodeproj \
+            -scheme LoupeDemo \
+            -destination "id=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
   web:

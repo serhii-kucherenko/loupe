@@ -45,3 +45,33 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
         SWIFT_VERSION: "5.9"
+
+  # A gesture is the one thing that cannot be checked any other way. A unit test can
+  # prove the model moves when told to; only a real touch proves the touch reaches it.
+  # The overlay's own controls were completely untappable on iOS once (SER-682) and
+  # every test passed the whole time, because they all drove the model directly.
+  LoupeDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: LoupeDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.loupe.demo.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SWIFT_VERSION: "5.9"
+        TEST_TARGET_NAME: LoupeDemo
+
+schemes:
+  LoupeDemo:
+    build:
+      targets:
+        LoupeDemo: all
+        LoupeDemoUITests: [test]
+    test:
+      targets:
+        - LoupeDemoUITests
