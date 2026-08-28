@@ -18,7 +18,11 @@ final class StubServer: @unchecked Sendable {
     private func response(for path: String, method: String) -> (status: Int, body: String) {
         switch (method, path) {
         case ("GET", let p) where p.hasPrefix("/v2/search"):
-            let query = p.contains("?q=") ? String(p.split(separator: "=").last ?? "") : ""
+            // Parsed properly rather than split on "=": "/v2/search?q=" splits into
+            // one piece, so the naive version read the path back as the query and
+            // the seeded failure never fired.
+            let query = URLComponents(string: "http://stub\(p)")?
+                .queryItems?.first(where: { $0.name == "q" })?.value ?? ""
             if query.isEmpty {
                 return (500, #"{"error":"query must not be empty"}"#)
             }
