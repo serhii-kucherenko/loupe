@@ -1,0 +1,51 @@
+name: npm doctor
+
+# Dispatch-only, and it publishes nothing. Two failed 403s on `npm publish` cannot
+# tell you whether the token lacks permission or the name is unavailable, and
+# guessing between them costs a round trip each time. This asks the registry
+# directly.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Who is this token
+        continue-on-error: true
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: What can it already write to
+        continue-on-error: true
+        run: npm access list packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The decisive question. If the unscoped name is refused but a name under the
+      # org is accepted, the org owns the name. If both are refused, it is the token.
+      - name: Can it write the unscoped name
+        continue-on-error: true
+        run: |
+          npm view loupe-web 2>&1 | head -3 || true
+          echo "--- dry run against the real endpoint ---"
+          npm publish --dry-run 2>&1 | tail -3
+        working-directory: web
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Is the org visible to this token
+        continue-on-error: true
+        run: npm org ls loupe-web
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
