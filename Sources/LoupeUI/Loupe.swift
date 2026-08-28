@@ -43,6 +43,7 @@ public enum Loupe {
             element: picked.ref,
             screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
             trace: NetworkRecorder.shared.recent(),
+            logs: LogRecorder.shared.recent(),
             screen: screen
         )
         session.add(annotation)

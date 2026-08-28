@@ -70,6 +70,9 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
     public var screenshotPNG: Data?
     /// Requests that fired shortly before the pick.
     public var trace: [NetworkEvent]
+    /// Log lines the host app produced shortly before the pick. Errors here are
+    /// often the real content of the ticket.
+    public var logs: [LogEvent]
     /// Where in the app this happened: route, screen name, tab.
     public var screen: String?
     public var capturedAt: Date
@@ -81,12 +84,30 @@ public struct Annotation: Codable, Sendable, Identifiable, Equatable {
         element: ElementRef,
         screenshotPNG: Data? = nil,
         trace: [NetworkEvent] = [],
+        logs: [LogEvent] = [],
         screen: String? = nil,
         capturedAt: Date = Date()
     ) {
         self.id = id; self.comment = comment; self.tag = tag
         self.element = element; self.screenshotPNG = screenshotPNG
-        self.trace = trace; self.screen = screen; self.capturedAt = capturedAt
+        self.trace = trace; self.logs = logs
+        self.screen = screen; self.capturedAt = capturedAt
+    }
+
+    /// Hand-written so that a bundle produced by an older build still decodes.
+    /// The format contract is that adding a field is safe; synthesised `Codable`
+    /// would break that by demanding every key.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        comment = try c.decode(String.self, forKey: .comment)
+        tag = try c.decodeIfPresent(AnnotationTag.self, forKey: .tag)
+        element = try c.decode(ElementRef.self, forKey: .element)
+        screenshotPNG = try c.decodeIfPresent(Data.self, forKey: .screenshotPNG)
+        trace = try c.decodeIfPresent([NetworkEvent].self, forKey: .trace) ?? []
+        logs = try c.decodeIfPresent([LogEvent].self, forKey: .logs) ?? []
+        screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        capturedAt = try c.decode(Date.self, forKey: .capturedAt)
     }
 }
 
