@@ -1,0 +1,179 @@
+#if os(macOS)
+import SwiftUI
+import AppKit
+import LoupeCore
+import LoupeUI
+
+/// Renders the overlay to PNG, light and dark, without a screen.
+///
+/// It uses a real `NSWindow` and a real hosting view rather than `ImageRenderer`.
+/// `ImageRenderer` cannot draw a live `TextField` - it puts a yellow box with a
+/// prohibition sign where the comment field should be - and it ignores the drawing
+/// appearance, so light and dark came out byte-identical. A real view hierarchy has
+/// neither problem, and it is also what actually ships.
+///
+/// A design system only checkable by launching an app is one that stops being
+/// checked. These land in `docs/screenshots/` and go in the pull request.
+@MainActor
+func run() {
+    let output = URL(fileURLWithPath: CommandLine.arguments.count > 1
+                     ? CommandLine.arguments[1]
+                     : "docs/screenshots")
+    try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+    _ = NSApplication.shared
+    NSApplication.shared.setActivationPolicy(.prohibited)
+
+    for (name, appearance) in [("light", NSAppearance(named: .aqua)!),
+                               ("dark", NSAppearance(named: .darkAqua)!)] {
+        for scene in Scene.allCases {
+            capture(scene, appearance: appearance,
+                    to: output.appendingPathComponent("\(scene.rawValue)-\(name).png"))
+        }
+    }
+    print("wrote \(Scene.allCases.count * 2) snapshots to \(output.path)")
+}
+
+// MARK: - The fake product underneath
+
+/// Absolute positions, so the element the overlay highlights and the row drawn on
+/// screen come from the same numbers. A snapshot where the outline misses the row
+/// is worse than no snapshot: it looks like the picker is broken.
+enum HostLayout {
+    static let size = CGSize(width: 900, height: 620)
+    static let rowX: CGFloat = 40
+    static let rowWidth: CGFloat = 420
+    static let rowHeight: CGFloat = 36
+    static let firstRowY: CGFloat = 150
+    static let rowGap: CGFloat = 8
+
+    static let rows = ["Blue canvas jacket   £128.00",
+                       "Wool overshirt, ink   £96.00",
+                       "Selvedge denim, 13oz   £145.00",
+                       "Boiled wool cap   £38.00"]
+
+    static func rowFrame(_ index: Int) -> CGRect {
+        CGRect(x: rowX,
+               y: firstRowY + CGFloat(index) * (rowHeight + rowGap),
+               width: rowWidth, height: rowHeight)
+    }
+
+    static let basket = CGRect(x: 520, y: 150, width: 300, height: 110)
+}
+
+struct HostApp<Overlay: View>: View {
+    @ViewBuilder var overlay: Overlay
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color(nsColor: .windowBackgroundColor)
+
+            Text("Stock").font(.title2).bold()
+                .frame(width: 200, height: 28, alignment: .leading)
+                .offset(x: HostLayout.rowX, y: 40)
+
+            HStack(spacing: 8) {
+                Text("wool")
+                    .padding(.horizontal, 8)
+                    .frame(width: 240, height: 28, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .border(Color.secondary.opacity(0.35))
+                Text("Search")
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(Color(nsColor: .controlColor))
+                    .border(Color.secondary.opacity(0.35))
+            }
+            .offset(x: HostLayout.rowX, y: 92)
+
+            ForEach(Array(HostLayout.rows.enumerated()), id: \.offset) { index, row in
+                let frame = HostLayout.rowFrame(index)
+                Text(row)
+                    .padding(.horizontal, 10)
+                    .frame(width: frame.width, height: frame.height, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .offset(x: frame.minX, y: frame.minY)
+            }
+
+            VStack(spacing: 4) {
+                Text("Your basket is empty")
+                Text("0 items").font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(width: HostLayout.basket.width, height: HostLayout.basket.height)
+            .background(Color.secondary.opacity(0.08))
+            .offset(x: HostLayout.basket.minX, y: HostLayout.basket.minY)
+
+            overlay
+        }
+        .frame(width: HostLayout.size.width, height: HostLayout.size.height)
+    }
+}
+
+// MARK: - The three states worth looking at
+
+enum Scene: String, CaseIterable {
+    case hover = "01-hover"
+    case comment = "02-comment"
+    case tray = "03-tray"
+
+    private static func ref(_ frame: CGRect, id: String, label: String) -> ElementRef {
+        ElementRef(accessibilityID: id, label: label, className: "ResultRow",
+                   bounds: Rect(x: frame.minX, y: frame.minY,
+                                width: frame.width, height: frame.height))
+    }
+
+    @MainActor
+    func model() -> OverlayModel {
+        struct Noop: Transport { func send(_ bundle: AnnotationBundle) async throws {} }
+        let model = OverlayModel(
+            session: AnnotationSession(app: AppInfo(name: "Northgate Supply", platform: "macOS"),
+                                       transport: Noop()))
+
+        let row = Self.ref(HostLayout.rowFrame(1), id: "search.results",
+                           label: "Wool overshirt, ink")
+
+        model.beginAnnotating()
+        switch self {
+        case .hover:
+            model.hover(row)
+        case .comment:
+            model.pick(row, screen: "/search")
+        case .tray:
+            model.pick(row, screen: "/search")
+            model.saveComment("clearing the search leaves the old results on screen", tag: .bug)
+            model.resumePicking()
+            model.pick(Self.ref(HostLayout.basket, id: "cart.empty",
+                                label: "Your basket is empty"),
+                       screen: "/cart")
+            model.saveComment("the empty basket gives you nowhere to go from here", tag: .polish)
+        }
+        return model
+    }
+}
+
+// MARK: - Rendering
+
+@MainActor
+func capture(_ scene: Scene, appearance: NSAppearance, to url: URL) {
+    let model = scene.model()
+    let window = NSWindow(contentRect: NSRect(origin: .zero, size: HostLayout.size),
+                          styleMask: [.borderless], backing: .buffered, defer: false)
+    window.appearance = appearance
+    window.contentView = NSHostingView(rootView: HostApp { OverlayRoot(model: model) })
+    window.orderBack(nil)
+
+    // Let SwiftUI lay out and settle before the bitmap is taken.
+    RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+
+    guard let content = window.contentView,
+          let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+        print("could not render \(url.lastPathComponent)"); return
+    }
+    content.cacheDisplay(in: content.bounds, to: rep)
+    guard let png = rep.representation(using: .png, properties: [:]) else { return }
+    try? png.write(to: url)
+    window.close()
+}
+
+MainActor.assumeIsolated { run() }
+#endif

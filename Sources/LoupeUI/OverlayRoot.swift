@@ -88,10 +88,15 @@ public struct OverlayRoot: View {
             .padding(LoupeTheme.Space.md)
             .transition(.move(edge: .bottom))
         } else {
-            HStack {
+            // Top of the trailing edge, not the middle of it. The tray grows
+            // downward as notes land, and a panel that floats in the vertical
+            // centre reads as a dialog rather than as a docked tool.
+            HStack(alignment: .top) {
                 Spacer()
                 panel.frame(maxHeight: size.height - LoupeTheme.Space.xxl)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             .padding(LoupeTheme.Space.lg)
             .transition(.move(edge: .trailing))
         }

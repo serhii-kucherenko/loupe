@@ -99,3 +99,18 @@ final class LoupeThemeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(LoupeTheme.Hit.pointer, 28)
     }
 }
+
+/// The Send button paints its label in `loupe.surface` on `loupe.action`. That is
+/// text, so it owes 4.5:1, not the 3:1 a plain shape would.
+extension LoupeThemeTests {
+    func testTheSendButtonLabelClears4point5OnItsOwnFill() {
+        for dark in [false, true] {
+            let fill = LoupeTheme.Colors.action.value(dark: dark)
+            let label = LoupeTheme.Colors.surface.value(dark: dark).composited(over: fill)
+            let ratio = label.contrastRatio(against: fill)
+            XCTAssertGreaterThanOrEqual(
+                ratio, 4.5,
+                "the Send label is \(ratio) on its own fill in \(dark ? "dark" : "light")")
+        }
+    }
+}

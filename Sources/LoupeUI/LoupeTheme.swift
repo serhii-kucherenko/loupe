@@ -229,8 +229,22 @@ public extension View {
     func loupePanel() -> some View {
         self
             .background(
+                // Blur, then scrim, then the surface. A 92% panel on its own lets
+                // the host app's own text read straight through a comment. The blur
+                // turns what shows through into depth rather than someone else's
+                // words, which is the whole reason the surface can stay translucent.
                 RoundedRectangle(cornerRadius: LoupeTheme.Radius.panel, style: .continuous)
                     .fill(LoupeTheme.Colors.surface.color)
+                    .background(
+                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.panel,
+                                         style: .continuous)
+                            .fill(LoupeTheme.Colors.scrim.color)
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.panel,
+                                         style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: LoupeTheme.Radius.panel, style: .continuous)

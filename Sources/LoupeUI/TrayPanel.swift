@@ -31,13 +31,36 @@ struct TrayPanel: View {
     static let width: CGFloat = 340
 
     var body: some View {
+        // With nothing picked yet, the tray is a one-line bar. A full-height panel
+        // saying "0 notes" and offering to send them would be competing with the
+        // popover for attention while someone is trying to type into it.
+        if model.annotations.isEmpty {
+            emptyBar
+        } else {
+            full
+        }
+    }
+
+    private var emptyBar: some View {
+        HStack(spacing: LoupeTheme.Space.sm) {
+            Text("Point at something that looks wrong.")
+                .font(LoupeTheme.Typography.body)
+                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+            Spacer()
+            closeButton
+        }
+        .padding(.horizontal, LoupeTheme.Space.md)
+        .padding(.vertical, LoupeTheme.Space.sm)
+        .frame(width: Self.width)
+        .loupePanel()
+    }
+
+    private var full: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(LoupeTheme.Colors.line.color)
 
-            if model.annotations.isEmpty {
-                emptyState
-            } else {
+            Group {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(model.annotations.enumerated()), id: \.element.id) { index, annotation in
@@ -72,29 +95,19 @@ struct TrayPanel: View {
             Button("Pick another") { model.resumePicking() }
                 .buttonStyle(LoupeButtonStyle(kind: .quiet))
                 .disabled(model.mode != .browsing)
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(LoupeButtonStyle(kind: .quiet))
-            .accessibilityLabel("Leave annotate mode")
+            closeButton
         }
         .padding(LoupeTheme.Space.md)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: LoupeTheme.Space.sm) {
-            Text("Nothing picked yet")
-                .font(LoupeTheme.Typography.label)
-                .foregroundStyle(LoupeTheme.Colors.ink.color)
-            Text("Point at something that looks wrong and click it.")
-                .font(LoupeTheme.Typography.caption)
-                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
-                .multilineTextAlignment(.center)
+    private var closeButton: some View {
+        Button {
+            onClose()
+        } label: {
+            Image(systemName: "xmark")
         }
-        .frame(maxWidth: .infinity)
-        .padding(LoupeTheme.Space.xl)
+        .buttonStyle(LoupeButtonStyle(kind: .quiet))
+        .accessibilityLabel("Leave annotate mode")
     }
 
     @ViewBuilder
@@ -156,8 +169,6 @@ struct TrayRow: View {
     let annotation: Annotation
     var onRemove: () -> Void
     var onTag: (AnnotationTag?) -> Void
-
-    @State private var isHovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: LoupeTheme.Space.md) {
@@ -224,12 +235,10 @@ struct TrayRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(LoupeButtonStyle(kind: .quiet))
-            .opacity(isHovering ? 1 : 0.5)
             .accessibilityLabel("Remove annotation \(index)")
         }
         .padding(LoupeTheme.Space.md)
         .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
         .accessibilityElement(children: .combine)
     }
 
