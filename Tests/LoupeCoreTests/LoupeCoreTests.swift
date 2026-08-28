@@ -96,6 +96,14 @@ final class NetworkRecorderTests: XCTestCase {
 
 final class FileTransportTests: XCTestCase {
 
+    // Regression: `homeDirectoryForCurrentUser` is unavailable on iOS, so this
+    // used to fail to compile for the platform Loupe targets first.
+    func testDefaultDirectoryResolvesOnEveryPlatform() {
+        let dir = FileTransport.defaultDirectory(appName: "Demo")
+        XCTAssertTrue(dir.path.hasSuffix("Demo"))
+        XCTAssertTrue(dir.isFileURL)
+    }
+
     func testWritesJSONAndScreenshotsSideBySide() async throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)

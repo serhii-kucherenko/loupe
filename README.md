@@ -70,9 +70,9 @@ Loupe.capture(at: otherPoint, in: window, comment: "empty state has no CTA", tag
 try await Loupe.send()
 ```
 
-By default bundles are written to `~/.loupe/<app-name>/`, so it works with no server to
-run and an agent with filesystem access can read them directly. Point it somewhere else
-with `HTTPTransport`.
+By default bundles are written to `~/.loupe/<app-name>/` on macOS, so it works with no server
+to run and an agent with filesystem access can read them directly. On a device use
+`HTTPTransport`, since nothing outside the app sandbox can read its files.
 
 ## What a bundle contains
 

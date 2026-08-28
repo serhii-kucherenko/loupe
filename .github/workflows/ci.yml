@@ -18,7 +18,7 @@ jobs:
     name: Build and test (macOS)
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show toolchain
         run: swift --version
@@ -35,12 +35,15 @@ jobs:
     # LoupeUI's UIKit paths never compile on macOS, so the macOS job cannot
     # catch a break in them. This job is the only thing that does.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build for iOS Simulator
+        # pipefail matters here: without it the pipeline reports xcpretty's exit
+        # code, so a failed build is reported as a passing job.
         run: |
+          set -o pipefail
           xcodebuild build \
             -scheme LoupeUI \
             -destination 'platform=iOS Simulator,name=iPhone 15' \
             -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO | xcpretty

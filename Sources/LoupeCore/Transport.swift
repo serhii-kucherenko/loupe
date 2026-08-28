@@ -16,11 +16,30 @@ public struct FileTransport: Transport {
         self.directory = directory
     }
 
-    /// `~/.loupe/<app-name>/`
+    /// Where bundles land when you do not name a directory.
+    ///
+    /// On macOS this is `~/.loupe/<app-name>/`, which an agent on the same machine
+    /// can read directly. iOS and iPadOS sandbox the app, so there is no home
+    /// directory to write to and nothing outside the app could read it anyway:
+    /// there, bundles go to Application Support and are really only useful until
+    /// they are uploaded. On a device, prefer `HTTPTransport`.
     public static func defaultDirectory(appName: String) -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        #if os(macOS)
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".loupe", isDirectory: true)
             .appendingPathComponent(appName, isDirectory: true)
+        #else
+        let base = (try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )) ?? URL(fileURLWithPath: NSTemporaryDirectory())
+
+        return base
+            .appendingPathComponent("Loupe", isDirectory: true)
+            .appendingPathComponent(appName, isDirectory: true)
+        #endif
     }
 
     public func send(_ bundle: AnnotationBundle) async throws {
