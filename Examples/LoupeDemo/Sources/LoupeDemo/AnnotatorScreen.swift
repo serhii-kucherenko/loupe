@@ -1,4 +1,3 @@
-#if os(macOS)
 import SwiftUI
 import LoupeCore
 
@@ -17,8 +16,9 @@ struct AnnotatorScreen: View {
     @State private var orderError: String?
 
     var body: some View {
-        HSplitView {
+        Columns {
             catalogue
+        } trailing: {
             basket
         }
         .task { await search("") }
@@ -69,12 +69,19 @@ struct AnnotatorScreen: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 2)
+                // Named for the same reason any app names a row. It does not
+                // reach Loupe on iOS - SwiftUI keeps its accessibility tree
+                // unbuilt until VoiceOver runs, so nothing at the UIKit level
+                // carries it - but it is what makes the row addressable on macOS
+                // and to a test runner, and the crop carries the meaning on iOS.
+                .accessibilityIdentifier("search.result.\(product.id)")
+                .accessibilityLabel("\(product.name), \(product.price)")
             }
             .accessibilityIdentifier("search.results")
             .frame(minHeight: 260)
         }
         .padding(16)
-        .frame(minWidth: 460)
+        .columnWidth(460)
     }
 
     // MARK: - Basket
@@ -113,12 +120,22 @@ struct AnnotatorScreen: View {
 
             Spacer()
 
-            Text("⌥⌘L to annotate")
+            Text(Self.annotateHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(16)
-        .frame(minWidth: 320)
+        .columnWidth(320)
+    }
+
+    /// The demo tells you how to open annotate mode, and that is not the same
+    /// sentence on a keyboard and on a touch screen.
+    private static var annotateHint: String {
+        #if os(macOS)
+        "\u{2325}\u{2318}L to annotate"
+        #else
+        "Tap Annotate to start"
+        #endif
     }
 
     // MARK: - Real requests
@@ -177,4 +194,3 @@ struct AnnotatorScreen: View {
         }
     }
 }
-#endif

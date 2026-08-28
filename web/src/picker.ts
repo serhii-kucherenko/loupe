@@ -92,7 +92,23 @@ export function pick(
   if (ignore?.(hit)) return null;
   const view = doc.defaultView;
   const viewportArea = view ? view.innerWidth * view.innerHeight : 0;
-  return meaningfulAncestor(hit, viewportArea);
+  const target = meaningfulAncestor(hit, viewportArea);
+  return isBackdrop(target, viewportArea) ? null : target;
+}
+
+/**
+ * Whether the pick landed on nothing.
+ *
+ * The area guard in the climb only fires while climbing, so it misses the case that
+ * matters most: pointing at empty page background, where the hit is already `<body>`
+ * and there is nothing to climb from. Found on iPad first, and the same hole was
+ * here. Refused only when the element is *also* unnamed - a full-bleed hero or map
+ * the page has named is a real element, and someone pointing at it means it.
+ */
+export function isBackdrop(element: Element, viewportArea: number): boolean {
+  if (viewportArea <= 0) return false;
+  if (area(element) / viewportArea <= MAX_VIEWPORT_AREA_FRACTION) return false;
+  return !isMeaningful(element);
 }
 
 export function elementRef(element: Element): ElementRef {

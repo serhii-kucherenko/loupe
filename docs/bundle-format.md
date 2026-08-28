@@ -112,6 +112,13 @@ missing field degrades quality, never correctness.
 
 A rect is `{ "x", "y", "width", "height" }`, all numbers, origin top-left.
 
+**An element reference with no `className` is a region, not an element.** Some UI
+frameworks do not back what you see with anything a picker can resolve - SwiftUI on
+iOS draws headings, stacks and backgrounds into one shared layer, so a point over a
+heading is indistinguishable from a point over blank space. Rather than drop the note,
+the SDK captures a fixed box around the point and reports only `bounds`. Read it as
+"the person pointed here"; the crop and the context shot are what carry the meaning.
+
 ### `trace[]`
 
 | Field | Type | Meaning |

@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 import LoupeCore
 
@@ -93,4 +92,3 @@ enum Seed {
         }
     }
 }
-#endif

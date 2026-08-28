@@ -18,6 +18,7 @@ contract: additive changes only, no breaking renames without a major.
 | `Sources/LoupeUI` | the picker, the theme, the overlay. Every platform seam lives here. |
 | `web/` | the TypeScript SDK. Its own package, its own tests. |
 | `Examples/LoupeDemo` | the seeded two-role demo, plus the snapshot renderer. |
+| `Examples/LoupeDemoApp` | the same demo sources, built as an iPad/iPhone app. XcodeGen input only. |
 | `docs/bundle-format.md` | the contract between the SDKs and anything that reads bundles. |
 | `docs/tokens.json` | `DESIGN.md`, machine-readable. Both SDKs are tested against it. |
 
@@ -34,10 +35,25 @@ contract: additive changes only, no breaking renames without a major.
 - The meaningful-ancestor walk is the correctness core, on both platforms. Changes there
   need a test. Two bugs have already come out of it: AppKit's static labels are
   `NSControl`s, and `elementFromPoint` retargets shadow content to the host.
+- A point the framework cannot resolve still captures: `ElementPicker.capture` falls back
+  to a fixed box around it (`region`), and every capture path goes through that one call
+  so the fallback cannot be wired into one platform and forgotten in another. A reference
+  with no `className` is a region.
+- A picked element on iOS under SwiftUI has **no name**: SwiftUI draws a row into one
+  layer and leaves its accessibility tree unbuilt until VoiceOver runs, so no `UILabel`,
+  accessible name, or identifier exists at the UIKit level. Verified by probe on an iPad
+  simulator. Do not go looking for it again. The crop and the context shot carry the
+  meaning there, which is why both are always captured.
 - Never use `instanceof` on DOM types in `web/`. An element inside an iframe is from
   another realm and the check silently fails. Check `tagName` or duck-type instead.
 - After changing anything visible, re-run the snapshots and look at them:
   `cd Examples/LoupeDemo && swift run LoupeSnapshots ../../docs/screenshots`.
+- Snapshots only cover macOS. For iPad and iPhone, build the app and drive it with the
+  scene hook, which is the only way those states are ever seen:
+  `cd Examples/LoupeDemoApp && xcodegen generate && xcodebuild -scheme LoupeDemo ...`,
+  then `xcrun simctl launch --console-pty <device> dev.loupe.demo scene=tray`
+  (`hover`, `pick`, `tray`). `simctl terminate` often does not take: `uninstall` and
+  reinstall between runs, or the tray still holds the previous run's notes.
 - For the web, headless Chrome `--screenshot` **races the page** even at
   `--virtual-time-budget=15000`: roughly one run in three captures before the module
   script has finished, and the result looks exactly like the overlay failing to

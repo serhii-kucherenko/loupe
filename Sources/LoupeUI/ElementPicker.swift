@@ -36,7 +36,25 @@ public enum ElementPicker {
     public static func pick(at point: CGPoint, in window: PlatformWindow) -> (view: PlatformView, ref: ElementRef)? {
         guard let hit = hitTest(point, in: window) else { return nil }
         let target = meaningfulAncestor(of: hit, in: window)
+        guard !isBackdrop(target, in: window) else { return nil }
         return (target, reference(for: target, in: window))
+    }
+
+    /// Whether the pick landed on nothing.
+    ///
+    /// The area guard in the climb only fires while climbing, so it misses the case
+    /// that matters most: pointing at empty space, where hit-testing hands back the
+    /// window-sized background view and there is nothing to climb from. Reporting
+    /// that produced a note with a blank crop and the element name "UIView", which
+    /// is worse than no note. Refused only when the view is *also* anonymous - a
+    /// full-screen map or image the app has named is a real element, and someone
+    /// pointing at it means it.
+    @MainActor
+    static func isBackdrop(_ view: PlatformView, in window: PlatformWindow) -> Bool {
+        let windowArea = area(of: windowBounds(window))
+        guard windowArea > 0,
+              area(of: view.bounds) / windowArea > maxWindowAreaFraction else { return false }
+        return !isMeaningful(view)
     }
 
     /// Climbs from the hit view to the element a person would say they clicked.
@@ -60,6 +78,13 @@ public enum ElementPicker {
         if let id = identifier(of: view), !id.isEmpty { return true }
         #if canImport(UIKit)
         if view is UIControl { return true }
+
+        // A cell *is* "one row of a list", which is exactly what a person means when
+        // they point at a row. Without this, a SwiftUI `List` - which renders into
+        // very few UIViews and names none of them - climbs all the way to the list
+        // itself, and the crop is the whole table instead of the line you meant.
+        // Framework-provided, so it needs no cooperation from the host app.
+        if view is UITableViewCell || view is UICollectionViewCell { return true }
         #elseif canImport(AppKit)
         // AppKit has no separate label class: a static label is an NSTextField,
         // which is an NSControl. Taking every NSControl as interactive therefore
@@ -107,6 +132,74 @@ public enum ElementPicker {
         #endif
     }
 
+    // MARK: - When there is no element
+
+    /// How wide a crop to take when the framework hands back no element.
+    ///
+    /// Big enough to carry the thing pointed at plus what sits beside it, small
+    /// enough that it is still a crop rather than a screenshot.
+    public static let regionSize: CGFloat = 180
+
+    /// A pick for a point the UI framework cannot resolve to anything.
+    ///
+    /// This is not an edge case on iOS. SwiftUI only backs a few kinds of content
+    /// with a real `UIView` - list cells, text fields, the controls it has to - and
+    /// draws everything else, headings and stacks and backgrounds included, into one
+    /// shared layer. Verified on an iPad: neither view nor layer hit-testing can tell
+    /// a point over a heading from a point over blank space. Without this, most of a
+    /// SwiftUI screen simply could not be annotated, which breaks the one promise the
+    /// tool makes.
+    ///
+    /// So the fallback answers the question the tool is actually for: it takes a box
+    /// around the point and captures that. The reference carries no class and no
+    /// name, because there genuinely is none - and an agent reading a bundle can tell
+    /// an unresolved region from a real element by exactly that.
+    @MainActor
+    public static func regionRef(at point: CGPoint, in window: PlatformWindow) -> ElementRef? {
+        guard let box = regionBox(at: point, in: window) else { return nil }
+        return ElementRef(bounds: Rect(x: box.origin.x, y: box.origin.y,
+                                       width: box.width, height: box.height))
+    }
+
+    /// The box a region pick covers: centred on the point, clipped to the window.
+    ///
+    /// Separate from the capture so hovering can draw the highlight without taking a
+    /// pair of window-sized snapshots on every pointer move.
+    @MainActor
+    static func regionBox(at point: CGPoint, in window: PlatformWindow) -> CGRect? {
+        let bounds = windowBounds(window)
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+
+        let half = regionSize / 2
+        let box = CGRect(x: point.x - half, y: point.y - half,
+                         width: regionSize, height: regionSize)
+            .intersection(CGRect(origin: .zero, size: bounds.size))
+        guard box.width > 1, box.height > 1 else { return nil }
+        return box
+    }
+
+    /// Everything one pick produces, whether or not the framework could name an
+    /// element. Every capture path goes through here so the fallback cannot be
+    /// wired into one platform and forgotten in another.
+    @MainActor
+    public static func capture(at point: CGPoint, in window: PlatformWindow)
+        -> (ref: ElementRef, screenshotPNG: Data?, contextScreenshotPNG: Data?)? {
+        if let picked = pick(at: point, in: window) {
+            return (picked.ref,
+                    screenshotPNG(of: picked.view),
+                    contextPNG(of: picked.view, in: window))
+        }
+        guard let box = regionBox(at: point, in: window),
+              let ref = regionRef(at: point, in: window) else { return nil }
+        return (ref, regionPNG(box, in: window), contextPNG(ofRegion: box, in: window))
+    }
+
+    /// What the highlight should follow, element or region.
+    @MainActor
+    public static func hoverRef(at point: CGPoint, in window: PlatformWindow) -> ElementRef? {
+        pick(at: point, in: window)?.ref ?? regionRef(at: point, in: window)
+    }
+
     /// The whole window, with the picked element outlined.
     ///
     /// The tight crop is the better picture of *the element*, but it strips every
@@ -115,10 +208,20 @@ public enum ElementPicker {
     /// the shot usable: without it, a full window is just a screenshot again.
     @MainActor
     public static func contextPNG(of view: PlatformView, in window: PlatformWindow) -> Data? {
+        contextPNG(ofRegion: boundsInWindow(view, window), in: window)
+    }
+
+    /// The same shot for a plain rectangle, which is what a region pick has instead
+    /// of a view.
+    ///
+    /// - Parameter box: top-left origin, in window points, like everything else the
+    ///   picker hands out. The flip back to AppKit's bottom-left happens here.
+    @MainActor
+    public static func contextPNG(ofRegion box: CGRect, in window: PlatformWindow) -> Data? {
         #if canImport(UIKit)
         guard let root = window.rootViewController?.view ?? window.subviews.first,
               root.bounds.width > 0, root.bounds.height > 0 else { return nil }
-        let frame = view.convert(view.bounds, to: root)
+        let frame = root.convert(box, from: nil)
 
         let renderer = UIGraphicsImageRenderer(bounds: root.bounds)
         return renderer.image { context in
@@ -134,10 +237,10 @@ public enum ElementPicker {
 
         content.cacheDisplay(in: content.bounds, to: rep)
 
-        // AppKit hands back a bottom-left frame, and the bitmap is drawn the same
-        // way up, so no flip is needed here - unlike `boundsInWindow`, which
-        // normalises for the format.
-        let frame = view.convert(view.bounds, to: nil)
+        // The bitmap is drawn bottom-left like the rest of AppKit, so the top-left
+        // box has to be flipped back before it is drawn on.
+        let frame = CGRect(x: box.minX, y: content.bounds.height - box.maxY,
+                           width: box.width, height: box.height)
 
         guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         NSGraphicsContext.saveGraphicsState()
@@ -145,6 +248,34 @@ public enum ElementPicker {
         outline(frame, in: context.cgContext)
         NSGraphicsContext.restoreGraphicsState()
 
+        return rep.representation(using: .png, properties: [:])
+        #endif
+    }
+
+    /// Just the box, cropped out of the window.
+    @MainActor
+    static func regionPNG(_ box: CGRect, in window: PlatformWindow) -> Data? {
+        #if canImport(UIKit)
+        guard let root = window.rootViewController?.view ?? window.subviews.first,
+              root.bounds.width > 0, root.bounds.height > 0 else { return nil }
+        let frame = root.convert(box, from: nil)
+
+        let renderer = UIGraphicsImageRenderer(size: frame.size)
+        return renderer.image { _ in
+            // Draw the whole root shifted so the box lands at the origin. Cropping
+            // the finished image would work too and cost a second full-size bitmap.
+            root.drawHierarchy(in: CGRect(x: -frame.origin.x, y: -frame.origin.y,
+                                          width: root.bounds.width,
+                                          height: root.bounds.height),
+                               afterScreenUpdates: true)
+        }.pngData()
+
+        #elseif canImport(AppKit)
+        guard let content = window.contentView, content.bounds.height > 0 else { return nil }
+        let frame = CGRect(x: box.minX, y: content.bounds.height - box.maxY,
+                           width: box.width, height: box.height)
+        guard let rep = content.bitmapImageRepForCachingDisplay(in: frame) else { return nil }
+        content.cacheDisplay(in: frame, to: rep)
         return rep.representation(using: .png, properties: [:])
         #endif
     }
@@ -219,16 +350,65 @@ public enum ElementPicker {
         #endif
     }
 
+    /// What a person would call this element.
+    ///
+    /// The element's own text first, then its accessible name, and finally the text
+    /// of whatever is inside it. That last fallback is what makes a container
+    /// useful: a SwiftUI list row is a `ListCollectionViewCell` with no name of its
+    /// own, and "ListCollectionViewCell" tells an agent nothing, while
+    /// "Wool overshirt, ink £96.00" locates the row immediately.
     @MainActor
     private static func label(of view: PlatformView) -> String? {
         #if canImport(UIKit)
-        if let label = view as? UILabel { return label.text }
-        if let button = view as? UIButton { return button.title(for: .normal) }
-        return view.accessibilityLabel
+        if let label = view as? UILabel, let text = label.text, !text.isEmpty { return text }
+        if let button = view as? UIButton, let title = button.title(for: .normal),
+           !title.isEmpty { return title }
+        if let name = view.accessibilityLabel, !name.isEmpty { return name }
         #elseif canImport(AppKit)
-        if let control = view as? NSControl { return control.stringValue }
-        return view.accessibilityLabel()
+        if let control = view as? NSControl, !control.stringValue.isEmpty {
+            return control.stringValue
+        }
+        if let name = view.accessibilityLabel(), !name.isEmpty { return name }
         #endif
+        return descendantText(of: view)
+    }
+
+    /// Nothing to find on iOS under SwiftUI. SwiftUI draws a row's text straight
+    /// into one layer and keeps its accessibility tree unbuilt until an assistive
+    /// client is running, so a `List` row has no `UILabel` inside it, no accessible
+    /// name, and no identifier at the UIKit level - it can only be reported as
+    /// `ListCollectionViewCell`. Verified on an iPad simulator, not assumed. The
+    /// crop and the context shot are what carry the meaning there, which is the
+    /// reason both are captured. This still earns its keep for AppKit and for any
+    /// UIKit view hierarchy built out of real views.
+    ///
+    /// The text inside a container, trimmed. Bounded on purpose: a whole screen of
+    /// words in a bundle field helps nobody, and neither does walking a deep tree
+    /// on every pointer move.
+    @MainActor
+    static func descendantText(of view: PlatformView, limit: Int = 6) -> String? {
+        var found: [String] = []
+
+        func walk(_ view: PlatformView, depth: Int) {
+            guard depth < 4, found.count < limit else { return }
+            for subview in view.subviews {
+                #if canImport(UIKit)
+                if let label = subview as? UILabel, let text = label.text, !text.isEmpty {
+                    found.append(text)
+                }
+                #elseif canImport(AppKit)
+                if let field = subview as? NSTextField, !field.stringValue.isEmpty {
+                    found.append(field.stringValue)
+                }
+                #endif
+                walk(subview, depth: depth + 1)
+            }
+        }
+        walk(view, depth: 0)
+
+        let text = found.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        return text.count > 80 ? String(text.prefix(79)) + "\u{2026}" : text
     }
 
     private static func area(of rect: CGRect) -> Double {

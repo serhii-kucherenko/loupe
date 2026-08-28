@@ -1,4 +1,3 @@
-#if os(macOS)
 import SwiftUI
 import LoupeCore
 
@@ -14,8 +13,9 @@ struct AgentInbox: View {
     private var directory: URL { FileTransport.defaultDirectory(appName: "LoupeDemo") }
 
     var body: some View {
-        HSplitView {
+        Columns {
             list
+        } trailing: {
             detail
         }
         .task { reload() }
@@ -50,7 +50,7 @@ struct AgentInbox: View {
             }
         }
         .padding(16)
-        .frame(minWidth: 280)
+        .columnWidth(280)
     }
 
     @ViewBuilder
@@ -150,9 +150,9 @@ struct AnnotationCard: View {
 
     @ViewBuilder
     private func picture(_ name: String, caption: String) -> some View {
-        if let image = NSImage(contentsOf: folder.appendingPathComponent(name)) {
+        if let image = demoImage(contentsOf: folder.appendingPathComponent(name)) {
             VStack(alignment: .leading, spacing: 2) {
-                Image(nsImage: image)
+                image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: 260, maxHeight: 180, alignment: .leading)
@@ -184,4 +184,3 @@ struct AnnotationCard: View {
         }
     }
 }
-#endif

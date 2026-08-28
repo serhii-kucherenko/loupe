@@ -202,17 +202,16 @@ public final class OverlayHost {
 
     private func hover() {
         guard case .picking = model.mode, let target else { return }
-        model.hover(ElementPicker.pick(at: target.point, in: target.window)?.ref)
+        model.hover(ElementPicker.hoverRef(at: target.point, in: target.window))
     }
 
     private func pick() {
         guard let target,
-              let picked = ElementPicker.pick(at: target.point, in: target.window) else { return }
+              let shot = ElementPicker.capture(at: target.point, in: target.window) else { return }
         let size = target.window.contentView?.bounds.size ?? .zero
-        model.pick(picked.ref,
-                   screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view,
-                                                                  in: target.window),
+        model.pick(shot.ref,
+                   screenshotPNG: shot.screenshotPNG,
+                   contextScreenshotPNG: shot.contextScreenshotPNG,
                    screen: target.window.title.isEmpty ? nil : target.window.title,
                    viewport: Rect(x: 0, y: 0, width: size.width, height: size.height))
     }
@@ -308,16 +307,20 @@ public final class OverlayHost {
         let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak scene] point in
             guard let model, let scene,
                   let target = WindowFinder.topmost(in: scene, excluding: overlayWindow),
-                  let picked = ElementPicker.pick(at: point, in: target) else { return }
-            model.pick(picked.ref,
-                       screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-                       contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: target),
+                  let shot = ElementPicker.capture(at: point, in: target) else { return }
+            model.pick(shot.ref,
+                       screenshotPNG: shot.screenshotPNG,
+                       contextScreenshotPNG: shot.contextScreenshotPNG,
                        viewport: Rect(x: 0, y: 0,
                                       width: target.bounds.width, height: target.bounds.height))
         })
 
-        let controller = UIHostingController(rootView: content)
+        let controller = UIHostingController(rootView: content.ignoresSafeArea())
         controller.view.backgroundColor = .clear
+        // Without this the SwiftUI origin sits below the status bar while
+        // `ElementRef.bounds` is in window coordinates, so every highlight is drawn
+        // a safe-area inset too low. The panels re-apply the insets themselves.
+        controller.view.insetsLayoutMarginsFromSafeArea = false
         window.rootViewController = controller
 
         window.isPassthrough = { [weak model] in
@@ -327,9 +330,49 @@ public final class OverlayHost {
 }
 
 /// The overlay plus the pill that opens it. iOS only: macOS has the hotkey.
+/// Reports the host window's safe area, and keeps reporting it after a rotation.
+///
+/// The overlay ignores the safe area on purpose so its coordinates match the window
+/// the picker measures in, which means SwiftUI reports it as having none. The window
+/// still knows the real numbers.
+private struct SafeAreaReader: UIViewRepresentable {
+    let onChange: (EdgeInsets) -> Void
+
+    final class Reader: UIView {
+        var onChange: ((EdgeInsets) -> Void)?
+
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            report()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report()
+        }
+
+        private func report() {
+            guard let insets = window?.safeAreaInsets else { return }
+            onChange?(EdgeInsets(top: insets.top, leading: insets.left,
+                                 bottom: insets.bottom, trailing: insets.right))
+        }
+    }
+
+    func makeUIView(context: Context) -> Reader {
+        let view = Reader()
+        view.isUserInteractionEnabled = false
+        view.onChange = onChange
+        return view
+    }
+
+    func updateUIView(_ view: Reader, context: Context) { view.onChange = onChange }
+}
+
 private struct OverlayRootWithPill: View {
     @ObservedObject var model: OverlayModel
     var onTap: (CGPoint) -> Void
+
+    @State private var safeArea = EdgeInsets()
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -346,7 +389,9 @@ private struct OverlayRootWithPill: View {
                     .onTapGesture { point in onTap(point) }
             }
 
-            OverlayRoot(model: model)
+            OverlayRoot(model: model, safeArea: safeArea)
+
+            SafeAreaReader { safeArea = $0 }
 
             if model.mode == .off {
                 Button {

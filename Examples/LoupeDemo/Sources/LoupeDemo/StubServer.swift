@@ -1,6 +1,10 @@
-#if os(macOS)
 import Foundation
 import Network
+
+enum StubServerError: Error, CustomStringConvertible {
+    case didNotStart
+    var description: String { "the stub server never became ready" }
+}
 
 /// A local HTTP server, about sixty lines of it, so the demo's network trace is
 /// real rather than mocked.
@@ -45,15 +49,25 @@ final class StubServer: @unchecked Sendable {
             connection.start(queue: .global())
             self?.serve(connection)
         }
+        // Wait for the listener to say it is ready before anyone builds a URL from
+        // its port. Polling `listener.port` instead looks equivalent and is not: on
+        // iOS it stayed nil for the whole timeout, the demo came up on port 0, and
+        // every request in the captured trace was a connection failure - which looks
+        // exactly like Loupe's network capture being broken. Found on an iPad.
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { state in
+            switch state {
+            case .ready, .failed, .cancelled: ready.signal()
+            default: break
+            }
+        }
+
         listener.start(queue: .global())
         self.listener = listener
 
-        // Wait for the kernel to hand back a port before anyone builds a URL from it.
-        let deadline = Date().addingTimeInterval(2)
-        while listener.port?.rawValue == nil, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.01)
-        }
+        _ = ready.wait(timeout: .now() + 5)
         port = listener.port?.rawValue ?? 0
+        guard port != 0 else { throw StubServerError.didNotStart }
     }
 
     func stop() {
@@ -87,4 +101,3 @@ final class StubServer: @unchecked Sendable {
         }
     }
 }
-#endif

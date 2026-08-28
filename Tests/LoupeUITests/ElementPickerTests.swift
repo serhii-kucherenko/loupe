@@ -85,12 +85,58 @@ final class ElementPickerTests: XCTestCase {
         XCTAssertEqual(bounds.height, 50, accuracy: 0.5)
     }
 
-    func testAPickOnEmptySpaceIsNotAnError() {
+    // Found on an iPad: pointing at empty space produced a note whose element was a
+    // window-sized `UIView` and whose crop was blank. Nothing is a better answer.
+    func testAPickOnEmptySpacePicksNothing() {
         let window = window { _ in }
+        XCTAssertNil(ElementPicker.pick(at: CGPoint(x: 200, y: 150), in: window))
+    }
+
+    // Pointing at content the framework cannot resolve must still capture something.
+    // On iOS this is the common case, not the edge one: SwiftUI draws headings and
+    // stacks into a shared layer with no view behind them.
+    func testAnUnresolvablePointStillCapturesTheRegionAroundIt() {
+        let window = window { _ in }
+
+        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 150), in: window)
+
+        XCTAssertNotNil(shot, "a point inside the window always captures something")
+        XCTAssertNil(shot?.ref.className, "a region has no element to name")
+        XCTAssertEqual(shot?.ref.bounds.width, ElementPicker.regionSize)
+        XCTAssertEqual(shot?.ref.bounds.height, ElementPicker.regionSize)
+        XCTAssertNotNil(shot?.screenshotPNG)
+        XCTAssertNotNil(shot?.contextScreenshotPNG)
+    }
+
+    // A point near an edge must not produce a box hanging off the window.
+    func testARegionAtTheEdgeIsClippedToTheWindow() {
+        let window = window { _ in }
+
+        let ref = ElementPicker.regionRef(at: CGPoint(x: 10, y: 10), in: window)
+
+        XCTAssertEqual(ref?.bounds.x, 0)
+        XCTAssertEqual(ref?.bounds.y, 0)
+        XCTAssertEqual(ref?.bounds.width, 10 + ElementPicker.regionSize / 2)
+    }
+
+    // The highlight has to follow the pointer over unresolvable content too, or the
+    // overlay looks broken exactly where the fallback is doing its job.
+    func testHoverFallsBackToTheRegionSoTheHighlightNeverDisappears() {
+        let window = window { _ in }
+        XCTAssertNotNil(ElementPicker.hoverRef(at: CGPoint(x: 200, y: 150), in: window))
+    }
+
+    // The other half of that rule: a full-screen element the app has named is a real
+    // element, and someone pointing at it means it.
+    func testAFullScreenElementTheAppNamedIsStillPickable() {
+        let window = window { content in
+            let canvas = NSView(frame: content.bounds)
+            canvas.identifier = NSUserInterfaceItemIdentifier("map.canvas")
+            content.addSubview(canvas)
+        }
+
         let picked = ElementPicker.pick(at: CGPoint(x: 200, y: 150), in: window)
-        // The content view itself is the only thing there; it must not crash, and it
-        // must not report a name it does not have.
-        XCTAssertNil(picked?.ref.accessibilityID)
+        XCTAssertEqual(picked?.ref.accessibilityID, "map.canvas")
     }
 }
 
@@ -145,4 +191,41 @@ final class WindowFinderTests: XCTestCase {
                                             excluding: nil)?.title, "app")
     }
 }
+
+/// A container with no name of its own is the common case in a real UI, and
+/// "ResultRow" tells an agent nothing that helps it find the row.
+@MainActor
+final class ElementLabelTests: XCTestCase {
+
+    func testAContainerBorrowsTheTextInsideIt() {
+        let card = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 60))
+        for (index, text) in ["Wool overshirt, ink", "£96.00"].enumerated() {
+            let field = NSTextField(labelWithString: text)
+            field.frame = NSRect(x: 0, y: index * 20, width: 180, height: 18)
+            card.addSubview(field)
+        }
+
+        XCTAssertEqual(ElementPicker.descendantText(of: card), "Wool overshirt, ink £96.00")
+    }
+
+    func testAnEmptyContainerBorrowsNothing() {
+        let empty = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+        XCTAssertNil(ElementPicker.descendantText(of: empty))
+    }
+
+    /// A whole screen of words in a bundle field helps nobody.
+    func testItIsTrimmedRatherThanUnbounded() {
+        let card = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+        for index in 0..<20 {
+            let field = NSTextField(labelWithString: "a rather long line of text \(index)")
+            field.frame = NSRect(x: 0, y: index * 18, width: 380, height: 16)
+            card.addSubview(field)
+        }
+
+        let text = ElementPicker.descendantText(of: card)
+        XCTAssertNotNil(text)
+        XCTAssertLessThanOrEqual(text?.count ?? 0, 80)
+    }
+}
 #endif
+

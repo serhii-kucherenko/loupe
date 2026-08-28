@@ -1,0 +1,45 @@
+# The iPad and iPhone build of the demo.
+#
+# SwiftPM cannot produce an iOS .app, so this needs an Xcode project. Only the
+# generator input is committed: a generated .xcodeproj alongside a project.yml would
+# be two truths, and the one nobody edits is the one that rots.
+#
+#   brew install xcodegen && xcodegen generate
+#
+# The sources are the *same files* the macOS demo builds. There is one copy of the
+# demo, and two build systems pointing at it.
+name: LoupeDemo
+options:
+  bundleIdPrefix: dev.loupe
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "16.0"
+
+packages:
+  Loupe:
+    path: ../..
+
+targets:
+  LoupeDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../LoupeDemo/Sources/LoupeDemo
+    dependencies:
+      - package: Loupe
+        product: LoupeCore
+      - package: Loupe
+        product: LoupeUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.loupe.demo
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        # The demo is never signed and never leaves a simulator or a dev device.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SWIFT_VERSION: "5.9"

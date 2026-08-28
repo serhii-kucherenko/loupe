@@ -97,6 +97,36 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
+  ipad:
+    name: Build the demo app (iPad)
+    runs-on: macos-14
+    # The demo's iOS half - the app delegate, the scene hook, the window attach - is
+    # not in any SwiftPM target, so the iOS job above never compiles it. Every
+    # device bug found so far came out of running this app, so it has to keep
+    # building.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the project
+        working-directory: Examples/LoupeDemoApp
+        run: xcodegen generate
+
+      - name: Build for the iPad Simulator
+        working-directory: Examples/LoupeDemoApp
+        run: |
+          set -o pipefail
+          NAME=$(xcrun simctl list devices available | grep -oE '^ +iPad [^(]+' | head -1 | xargs)
+          echo "Using $NAME"
+          xcodebuild build \
+            -project LoupeDemo.xcodeproj \
+            -scheme LoupeDemo \
+            -destination "platform=iOS Simulator,name=$NAME" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO | xcpretty
+
   web:
     name: Build and test (web)
     runs-on: ubuntu-latest

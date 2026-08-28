@@ -26,6 +26,14 @@ struct TrayPanel: View {
     /// One line rather than a panel. True while picking, so the page underneath
     /// stays reachable, and whenever there is nothing to show yet.
     var compact: Bool = false
+    /// Rendered as a bottom sheet: full width, flush with the bottom edge. What
+    /// `DESIGN.md` asks for on a phone, and the reason the panel is pushed down by
+    /// its own corner radius - `UnevenRoundedRectangle` would say it better and is
+    /// iOS 16.4, above the floor this package promises.
+    var sheet: Bool = false
+    /// The home indicator's height. A sheet flush with the edge has to keep it clear
+    /// itself, since nothing outside is padding it any more.
+    var safeBottom: CGFloat = 0
     var onClose: () -> Void
 
     @FocusState private var sendFocused: Bool
@@ -37,7 +45,10 @@ struct TrayPanel: View {
         // A full-height panel saying "0 notes" and offering to send them would also
         // be competing with the popover for attention while someone types into it.
         if compact || model.annotations.isEmpty {
-            bar
+            // The one-line bar stays a floating pill even on a phone: it is a status
+            // line, not a surface, and a full-width sheet saying "0 notes" would be
+            // covering the app for no reason.
+            bar.padding(.bottom, sheet ? safeBottom + LoupeTheme.Radius.panel : 0)
         } else {
             full
         }
@@ -93,7 +104,8 @@ struct TrayPanel: View {
             Divider().overlay(LoupeTheme.Colors.line.color)
             footer
         }
-        .frame(width: Self.width)
+        .padding(.bottom, sheet ? safeBottom + LoupeTheme.Radius.panel : 0)
+        .frame(maxWidth: sheet ? .infinity : Self.width)
         .loupePanel()
         .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.commit,
                                               reduceMotion: reduceMotion),

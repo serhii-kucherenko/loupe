@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 
 import {
   isMeaningful, meaningfulAncestor, namedBy, elementRef, cssSelector, labelOf,
+  isBackdrop,
 } from "../src/picker.js";
 
 /**
@@ -135,4 +136,23 @@ test("an element reference carries what an agent can act on", () => {
   assert.equal(ref.className, "div");
   assert.equal(ref.selector, 'div[data-testid="cart.empty"]');
   assert.deepEqual(ref.bounds, { x: 300, y: 260, width: 300, height: 120 });
+});
+
+// Found on an iPad and mirrored here: pointing at empty space produced a note whose
+// element was the whole page and whose crop was blank. Nothing is a better answer.
+test("an unnamed element the size of the page is not an element", () => {
+  const { document } = dom(`<div class="bg" data-rect="0,0,1000,800"></div>`);
+  assert.equal(isBackdrop(q(document, ".bg"), 1000 * 800), true);
+});
+
+test("a full-bleed element the page named is still pickable", () => {
+  const { document } = dom(
+    `<div id="hero" data-loupe-id="home.hero" data-rect="0,0,1000,800"></div>`,
+  );
+  assert.equal(isBackdrop(q(document, "#hero"), 1000 * 800), false);
+});
+
+test("an ordinary element is never a backdrop", () => {
+  const { document } = dom(`<div class="card" data-rect="0,0,200,100"></div>`);
+  assert.equal(isBackdrop(q(document, ".card"), 1000 * 800), false);
 });

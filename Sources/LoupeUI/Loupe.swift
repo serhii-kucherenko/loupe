@@ -79,14 +79,15 @@ public enum Loupe {
         tag: AnnotationTag? = nil,
         screen: String? = nil
     ) -> Annotation? {
-        guard let session, let picked = ElementPicker.pick(at: point, in: window) else { return nil }
+        guard let session,
+              let shot = ElementPicker.capture(at: point, in: window) else { return nil }
 
         let annotation = Annotation(
             comment: comment,
             tag: tag,
-            element: picked.ref,
-            screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-            contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: window),
+            element: shot.ref,
+            screenshotPNG: shot.screenshotPNG,
+            contextScreenshotPNG: shot.contextScreenshotPNG,
             trace: NetworkRecorder.shared.recent(),
             logs: LogRecorder.shared.recent(),
             screen: screen,

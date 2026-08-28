@@ -136,4 +136,54 @@ final class ElementPickerUIKitTests: XCTestCase {
             .ref.accessibilityID)
     }
 }
+
+/// The platform the region fallback exists for. SwiftUI backs almost nothing on iOS
+/// with a real view, so without this most of a screen could not be annotated at all.
+@MainActor
+final class ElementRegionUIKitTests: XCTestCase {
+
+    private func makeWindow() -> UIWindow {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+        let root = UIViewController()
+        root.view.frame = window.bounds
+        window.rootViewController = root
+        window.isHidden = false
+        return window
+    }
+
+    func testAPointOverNothingStillCaptures() {
+        let window = makeWindow()
+
+        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
+
+        XCTAssertNotNil(shot)
+        XCTAssertNil(shot?.ref.className, "a region has no element to name")
+        XCTAssertEqual(shot?.ref.bounds.width, ElementPicker.regionSize)
+        XCTAssertNotNil(shot?.screenshotPNG)
+        XCTAssertNotNil(shot?.contextScreenshotPNG)
+    }
+
+    func testTheRegionIsCentredOnThePoint() {
+        let window = makeWindow()
+        let half = ElementPicker.regionSize / 2
+
+        let ref = ElementPicker.regionRef(at: CGPoint(x: 200, y: 300), in: window)
+
+        XCTAssertEqual(ref?.bounds.x, 200 - half)
+        XCTAssertEqual(ref?.bounds.y, 300 - half)
+    }
+
+    func testARealElementIsStillPreferredOverARegion() {
+        let window = makeWindow()
+        let card = UIView(frame: CGRect(x: 150, y: 250, width: 100, height: 100))
+        card.accessibilityIdentifier = "product.card"
+        window.rootViewController?.view.addSubview(card)
+
+        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
+
+        XCTAssertEqual(shot?.ref.accessibilityID, "product.card")
+        XCTAssertEqual(shot?.ref.bounds.width, 100)
+    }
+}
 #endif
+

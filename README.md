@@ -145,6 +145,12 @@ language from that page alone.
 | ![Hovering](docs/screenshots/01-hover-light.png) | ![The tray](docs/screenshots/03-tray-dark.png) |
 | Point at something. The highlight climbs to the element you *meant*. | Several screens, one tray. Every note carries the endpoint behind it. |
 
+On an iPad the tray is a side panel; on an iPhone it becomes a bottom sheet:
+
+| | |
+|---|---|
+| ![iPad](docs/screenshots/07-ipad-tray.png) | ![iPhone](docs/screenshots/08-iphone-sheet.png) |
+
 The same thing on the web, in Chromium:
 
 ![The web overlay](docs/screenshots/04-web-comment.png)
@@ -187,7 +193,8 @@ which endpoint a screen calls.
 
 Pre-1.0, and working end to end on every platform it claims: the picker, the recorders,
 the transports, the offline queue, the overlay, the tray, and a seeded two-role demo on
-both macOS and the web. Not yet run on real iPad hardware.
+macOS, iPad, iPhone and the web. Run and screenshotted on the iPad and iPhone
+simulators; not yet on physical hardware.
 
 The [bundle format](docs/bundle-format.md) is version 1 and has a
 [JSON Schema](docs/bundle-format.schema.json). Adding a field is safe; renaming or

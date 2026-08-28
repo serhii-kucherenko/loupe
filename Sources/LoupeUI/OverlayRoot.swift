@@ -17,8 +17,18 @@ public struct OverlayRoot: View {
     private var isCompact: Bool { false }
     #endif
 
-    public init(model: OverlayModel) {
+    /// The host window's own safe area.
+    ///
+    /// Not `geometry.safeAreaInsets`: the overlay deliberately ignores the safe area
+    /// so its coordinates match the window the picker measures in, and a view that
+    /// ignores the safe area is reported as having none. Reading it there gave a
+    /// bottom sheet that sat 15pt under the home indicator. Whoever owns the window
+    /// knows the real numbers, so they are passed in.
+    var safeArea: EdgeInsets = EdgeInsets()
+
+    public init(model: OverlayModel, safeArea: EdgeInsets = EdgeInsets()) {
         self.model = model
+        self.safeArea = safeArea
     }
 
     public var body: some View {
@@ -52,7 +62,7 @@ public struct OverlayRoot: View {
                     .position(x: frame.midX, y: frame.minY + frame.height / 2)
                 }
 
-                tray(in: geometry.size)
+                tray(in: geometry.size, insets: safeArea)
             }
             .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
                                                   reduceMotion: reduceMotion),
@@ -78,22 +88,24 @@ public struct OverlayRoot: View {
     }
 
     @ViewBuilder
-    private func tray(in size: CGSize) -> some View {
+    private func tray(in size: CGSize, insets: EdgeInsets) -> some View {
         // The full tray belongs to browsing. While you are picking it would cover
         // part of the app, and anything under it could not be pointed at - which is
         // the one thing this tool must never take away.
         let panel = TrayPanel(model: model,
                               compact: model.mode != .browsing,
+                              sheet: isCompact,
+                              safeBottom: insets.bottom,
                               onClose: { model.endAnnotating() })
 
         if isCompact {
-            VStack {
+            VStack(spacing: 0) {
                 Spacer()
-                panel
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: size.height * 0.5)
+                panel.frame(maxHeight: size.height * 0.5)
             }
-            .padding(LoupeTheme.Space.md)
+            // Pushed down by one corner radius so the sheet's lower corners fall off
+            // the screen and it reads as hugging the edge rather than floating.
+            .padding(.bottom, -LoupeTheme.Radius.panel)
             .transition(.move(edge: .bottom))
         } else {
             // Top of the trailing edge, not the middle of it. The tray grows
@@ -106,6 +118,8 @@ public struct OverlayRoot: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .padding(LoupeTheme.Space.lg)
+            .padding(.top, insets.top)
+            .padding(.trailing, insets.trailing)
             .transition(.move(edge: .trailing))
         }
     }
