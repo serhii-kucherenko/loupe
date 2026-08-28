@@ -67,6 +67,10 @@ export class Overlay {
   private mode: OverlayMode = { kind: "off" };
   private sendState: SendState = { kind: "idle" };
   private draft = { comment: "", tag: undefined as AnnotationTag | undefined };
+  /// The popover is rebuilt on every render, so "focus the field" has to mean the
+  /// first time it opens. Focusing on each render throws a keyboard user out of the
+  /// tag chips the moment they choose one.
+  private popoverIsNew = true;
   private listeners: Array<() => void> = [];
 
   constructor(session: AnnotationSession, view: Window & typeof globalThis,
@@ -193,6 +197,9 @@ export class Overlay {
   // MARK: - Input
 
   private setMode(next: OverlayMode): void {
+    if (next.kind === "commenting" && this.mode.kind !== "commenting") {
+      this.popoverIsNew = true;
+    }
     this.mode = next;
     this.updatePageListeners();
     this.render();
@@ -383,8 +390,11 @@ export class Overlay {
     row.append(cancel, this.element("div", { class: "spacer" }), save);
 
     panel.append(head, field, chips, row);
-    // Focused on open: the overlay must never make someone wait to leave a note.
-    this.view.setTimeout(() => field.focus(), 0);
+    if (this.popoverIsNew) {
+      // Focused on open: the overlay must never make someone wait to leave a note.
+      this.popoverIsNew = false;
+      this.view.setTimeout(() => field.focus(), 0);
+    }
     return panel;
   }
 

@@ -258,3 +258,22 @@ test("the full tray belongs to browsing, so picking can reach the whole page", a
   assert.match(bar.textContent!, /1 note/, "the count still has to be visible");
   assert.equal(session.count, 1);
 });
+
+test("choosing a tag does not throw the keyboard out of the chip row", async () => {
+  const { document, overlay } = page(`<div data-rect="0,0,200,40">x</div>`);
+  overlay.begin();
+  await overlay.pickAt(50, 20);
+
+  const field = shadow(document).querySelector("textarea") as HTMLTextAreaElement;
+  field.value = "half a sentence";
+  field.dispatchEvent(new document.defaultView!.Event("input"));
+
+  (shadow(document).querySelector(".chip") as HTMLButtonElement).click();
+
+  const rebuilt = shadow(document).querySelector("textarea") as HTMLTextAreaElement;
+  assert.equal(rebuilt.value, "half a sentence", "the typed text survives the rebuild");
+  assert.equal(shadow(document).querySelector('.chip[aria-pressed="true"]')?.textContent,
+    "bug");
+  assert.notEqual(document.activeElement?.tagName, "TEXTAREA",
+    "focus must stay where the person put it");
+});
