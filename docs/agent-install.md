@@ -296,11 +296,38 @@ A missing field degrades quality, never correctness.
 ## Verification — do not report this installed until all of it passes
 
 1. **It builds.** Run the project's own build and test commands.
-2. **It is absent from production.** Build for production and grep the output:
+2. **No Loupe code runs in production.** What you can check differs by platform, and
+   the difference is real rather than a technicality.
+
+   **Web.** The dynamic `import()` genuinely keeps it out of the bundle, so grep and
+   expect nothing:
    ```sh
    grep -r "loupe" dist/ build/ .next/ 2>/dev/null | grep -v ".map" | head
    ```
    Any hit means the guard is wrong. Fix it before continuing.
+
+   **Apple.** Do **not** grep the binary. Xcode links a Swift package product whole
+   rather than pulling in only what is referenced, so the symbols are present in a
+   Release build even when every call site is behind `#if DEBUG` and nothing can
+   reach them. Measured in a real app: 782 Loupe symbols in a Release build whose
+   guard was correct. An agent that greps here will fail a gate it cannot pass and
+   then go hunting for a mistake it did not make.
+
+   Check reachability instead, which is what actually matters:
+   ```sh
+   grep -rn "Loupe\." --include="*.swift" . | grep -v "#if DEBUG" | head
+   ```
+   Every call site must sit inside a `#if DEBUG` (or your own staging flag). No
+   `Loupe.start`, no `Loupe.attach`, no `NetworkRecorder.install()` outside one.
+   Nothing observes anything, no window is created, and no behaviour ships.
+
+   To remove the symbols too, the host needs a build configuration or target that
+   omits the package dependency entirely. Say so rather than pretending the guard
+   does it.
+
+   One trap while checking: a Debug build puts the app's own code in
+   `<App>.debug.dylib`, so grepping the main binary of a Debug build finds nothing
+   and looks like the opposite result.
 3. **The overlay opens.** Run the app, press ⌥⌘L (or tap the pill). A bar reading
    "Point at something that looks wrong." must appear.
 4. **A pick lands on the right element.** Point at something with text inside it, like a
