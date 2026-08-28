@@ -68,6 +68,6 @@ jobs:
       # prepublishOnly wipes dist, re-syncs the tokens, rebuilds and runs the suite.
       - name: Publish
         if: steps.token.outputs.have == 'yes'
-        run: npm publish --access public
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

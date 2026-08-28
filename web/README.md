@@ -1,4 +1,4 @@
-# @loupe/web
+# loupe-web
 
 **Point at your running web app. Say what is wrong. An agent gets everything it needs.**
 
@@ -11,7 +11,7 @@ No runtime dependencies.
 ## Install
 
 ```sh
-npm install @loupe/web
+npm install loupe-web
 ```
 
 ## Use
@@ -19,7 +19,7 @@ npm install @loupe/web
 One call, in dev and staging builds only:
 
 ```ts
-import { start } from "@loupe/web";
+import { start } from "loupe-web";
 
 start({
   app: { name: "Acme", version: "1.4.0", commitSHA: __GIT_SHA__, platform: "web" },

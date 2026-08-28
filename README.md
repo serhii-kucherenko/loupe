@@ -63,7 +63,7 @@ Requires Swift 5.9, macOS 13, or iOS 16.
 ### Web and Electron
 
 ```sh
-npm install @loupe/web
+npm install loupe-web
 ```
 
 See [`web/README.md`](web/README.md). Electron comes free: its renderer is Chromium.
@@ -86,7 +86,7 @@ Point at something, say what is wrong, point at something else, press Send.
 On the web it is one call:
 
 ```ts
-import { start } from "@loupe/web";
+import { start } from "loupe-web";
 start({ app: { name: "Demo", platform: "web" }, endpoint: "/loupe/intake" });
 ```
 

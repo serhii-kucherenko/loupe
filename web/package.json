@@ -1,8 +1,18 @@
 {
-  "name": "@loupe/web",
+  "name": "loupe-web",
   "version": "0.1.0",
   "description": "Point at your running web app, say what is wrong, and an agent gets everything it needs.",
   "license": "MIT",
+  "author": "Serhii Kucherenko",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/serhii-kucherenko/loupe.git",
+    "directory": "web"
+  },
+  "homepage": "https://github.com/serhii-kucherenko/loupe/tree/main/web",
+  "bugs": {
+    "url": "https://github.com/serhii-kucherenko/loupe/issues"
+  },
   "type": "module",
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
@@ -17,6 +27,9 @@
     "README.md"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -38,8 +51,5 @@
     "ai-agent",
     "feedback",
     "screenshot"
-  ],
-  "engines": {
-    "node": ">=18"
-  }
+  ]
 }
