@@ -60,6 +60,37 @@ final class OverlayWindowUIKitTests: XCTestCase {
         XCTAssertNil(WindowFinder.topmost(among: [overlay], excluding: overlay))
     }
 
+    /// Reported from an iPad running a real app: with a context menu open, a tap on
+    /// a menu item produced no note at all.
+    ///
+    /// `UITextEffectsWindow` sits above the app at level 1 and is empty. On any
+    /// scene where text interaction has happened it wins on level, so the pick
+    /// hit-tested a blank pane instead of the window holding the menu. A window with
+    /// nothing under the point is not what anyone pointed at.
+    func testAWindowWithNothingUnderThePointIsSkipped() {
+        let app = window(level: .normal, id: "app.screen")
+        // Empty, above the app, and it accepts no touch anywhere - which is exactly
+        // how the system's text-effects window behaves.
+        let effects = window(level: UIWindow.Level(rawValue: 1))
+        effects.isUserInteractionEnabled = false
+
+        let inTheCard = CGPoint(x: 100, y: 140)
+        XCTAssertIdentical(
+            WindowFinder.topmost(among: [app, effects], excluding: nil, at: inTheCard),
+            app,
+            "the empty pane above the app is not what the person is looking at")
+    }
+
+    /// A pick somewhere imperfect still beats a tap that does nothing, so an empty
+    /// point falls back to the plain topmost rule rather than returning nothing.
+    func testAPointWithNothingAnywhereFallsBackRatherThanGivingUp() {
+        let app = window(level: .normal, id: "app.screen")
+        let outsideEveryWindow = CGPoint(x: 5_000, y: 5_000)
+
+        XCTAssertNotNil(
+            WindowFinder.topmost(among: [app], excluding: nil, at: outsideEveryWindow))
+    }
+
     func testAHiddenWindowIsNotWhatSomeoneIsLookingAt() {
         let visible = window(level: .normal, id: "visible")
         let dismissed = window(level: .alert, id: "dismissed")
