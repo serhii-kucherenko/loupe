@@ -29,14 +29,6 @@ jobs:
       - name: Test
         run: swift test -v
 
-      # The package declares Swift 5 mode, so a consumer on Swift 6 still compiles
-      # these sources as v5 and would never see a diagnostic from them. That is
-      # exactly why it has to be checked here: a library that only compiles cleanly
-      # in the mode it happens to declare is one toolchain bump from being someone
-      # else's problem.
-      - name: Swift 6 language mode, sources and tests
-        run: swift build --build-tests -Xswiftc -swift-version -Xswiftc 6
-
   ios:
     name: Build and test (iOS)
     runs-on: macos-14
@@ -65,6 +57,27 @@ jobs:
             -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
+
+  swift6:
+    name: Swift 6 language mode
+    # A newer image on purpose. macos-14 ships a toolchain that rejects
+    # `-swift-version 6` outright, and the job above stays on it deliberately: the
+    # README promises Swift 5.9, and something has to keep proving that.
+    #
+    # This matters even though the package declares Swift 5 mode. A consumer on
+    # Swift 6 compiles these sources as v5 and would never see a diagnostic from
+    # them - which is exactly why nothing else would catch it. A library that only
+    # compiles cleanly in the mode it happens to declare is one toolchain bump from
+    # being somebody else's problem.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Sources and tests, in Swift 6 mode
+        run: swift build --build-tests -Xswiftc -swift-version -Xswiftc 6
 
   catalyst:
     name: Build (Mac Catalyst)
