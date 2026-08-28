@@ -12,15 +12,14 @@ private func annotation(_ comment: String) -> Annotation {
 
 /// Killing the app must not lose what someone already typed. The tray is written
 /// to disk on every change, not only when Send is pressed.
+@MainActor
 final class SessionPersistenceTests: XCTestCase {
 
-    private var file = URL(fileURLWithPath: NSTemporaryDirectory())
-
-    override func setUp() {
-        super.setUp()
-        file = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("\(UUID().uuidString)/tray.json")
-    }
+    // XCTest builds a fresh instance per test method, so this is already unique per
+    // test. A `let` of a Sendable type is also readable from the nonisolated
+    // tearDown, which a `var` on a main-actor class is not.
+    private let file = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("\(UUID().uuidString)/tray.json")
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
@@ -77,7 +76,7 @@ final class SessionPersistenceTests: XCTestCase {
                                         transport: Failing(),
                                         persistingTo: file)
         session.add(annotation("stays put"))
-        try? await session.send()
+        _ = try? await session.send()
 
         XCTAssertEqual(makeSession().annotations.map(\.comment), ["stays put"])
     }

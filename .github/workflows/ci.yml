@@ -29,6 +29,14 @@ jobs:
       - name: Test
         run: swift test -v
 
+      # The package declares Swift 5 mode, so a consumer on Swift 6 still compiles
+      # these sources as v5 and would never see a diagnostic from them. That is
+      # exactly why it has to be checked here: a library that only compiles cleanly
+      # in the mode it happens to declare is one toolchain bump from being someone
+      # else's problem.
+      - name: Swift 6 language mode, sources and tests
+        run: swift build --build-tests -Xswiftc -swift-version -Xswiftc 6
+
   ios:
     name: Build and test (iOS)
     runs-on: macos-14
@@ -55,6 +63,24 @@ jobs:
           xcodebuild test \
             -scheme Loupe-Package \
             -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO | xcpretty
+
+  catalyst:
+    name: Build (Mac Catalyst)
+    runs-on: macos-14
+    # Catalyst can import AppKit but cannot use it, so a standalone
+    # `#if canImport(AppKit)` block compiles alongside the UIKit one and then fails
+    # on NSPanel. Neither the macOS job nor the iOS job catches that; only this does.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build for Mac Catalyst
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme LoupeUI \
+            -destination 'platform=macOS,variant=Mac Catalyst' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 

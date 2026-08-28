@@ -68,7 +68,7 @@ final class QueuedTransportTests: XCTestCase {
         let inner = FlakyTransport(shouldFail: true)
         let queue = QueuedTransport(wrapping: inner, directory: directory)
 
-        try? await queue.send(makeBundle("first"))
+        _ = try? await queue.send(makeBundle("first"))
         XCTAssertEqual(queue.pendingCount, 1)
 
         inner.shouldFail = false
@@ -83,9 +83,9 @@ final class QueuedTransportTests: XCTestCase {
         let queue = QueuedTransport(wrapping: inner, directory: directory)
         let base = Date(timeIntervalSince1970: 1_000_000)
 
-        try? await queue.send(makeBundle("oldest", sentAt: base))
-        try? await queue.send(makeBundle("middle", sentAt: base.addingTimeInterval(60)))
-        try? await queue.send(makeBundle("newest", sentAt: base.addingTimeInterval(120)))
+        _ = try? await queue.send(makeBundle("oldest", sentAt: base))
+        _ = try? await queue.send(makeBundle("middle", sentAt: base.addingTimeInterval(60)))
+        _ = try? await queue.send(makeBundle("newest", sentAt: base.addingTimeInterval(120)))
 
         inner.shouldFail = false
         try await queue.drain()
@@ -99,7 +99,7 @@ final class QueuedTransportTests: XCTestCase {
     func testABacklogSurvivesAcrossInstances() async throws {
         let offline = QueuedTransport(wrapping: FlakyTransport(shouldFail: true),
                                       directory: directory)
-        try? await offline.send(makeBundle("written before the crash"))
+        _ = try? await offline.send(makeBundle("written before the crash"))
 
         let inner = FlakyTransport(shouldFail: false)
         let afterRestart = QueuedTransport(wrapping: inner, directory: directory)
@@ -114,8 +114,8 @@ final class QueuedTransportTests: XCTestCase {
         let inner = FlakyTransport(shouldFail: true)
         let queue = QueuedTransport(wrapping: inner, directory: directory)
 
-        try? await queue.send(makeBundle("a"))
-        try? await queue.send(makeBundle("b"))
+        _ = try? await queue.send(makeBundle("a"))
+        _ = try? await queue.send(makeBundle("b"))
 
         do {
             try await queue.drain()
@@ -131,7 +131,7 @@ final class QueuedTransportTests: XCTestCase {
 
         var bundle = makeBundle("with a crop")
         bundle.annotations[0].screenshotPNG = Data([0x89, 0x50, 0x4E, 0x47])
-        try? await queue.send(bundle)
+        _ = try? await queue.send(bundle)
 
         inner.shouldFail = false
         try await queue.drain()

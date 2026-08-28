@@ -8,6 +8,11 @@ import Foundation
 /// is written straight through to that file, because the realistic loss is not a
 /// failed send: it is someone annotating on a phone, switching apps, and the system
 /// reclaiming the process before they ever pressed Send.
+/// Main-actor isolated on purpose. A tray is filled by someone clicking and read by
+/// the panel showing it, so main-actor is the truthful model rather than a
+/// concession to the compiler - and stating it is what lets `send` await a transport
+/// without the session itself crossing an isolation boundary.
+@MainActor
 public final class AnnotationSession {
     public private(set) var id = UUID()
     public private(set) var annotations: [Annotation] = []

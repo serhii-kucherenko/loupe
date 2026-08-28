@@ -22,13 +22,67 @@ import AppKit
 /// window, and while browsing it shrinks to the strip the tray occupies. Everything
 /// outside that strip is then pass-through by construction, with no guessing about
 /// what SwiftUI's hit-testing will do.
+/// Owns the event monitors and notification observers, and can be emptied from a
+/// nonisolated `deinit` because it is Sendable and does its own locking.
+private final class Registrations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var monitors: [Any] = []
+    private var observers: [NSObjectProtocol] = []
+
+    func add(monitor: Any) {
+        lock.lock(); defer { lock.unlock() }
+        monitors.append(monitor)
+    }
+
+    func add(observer: NSObjectProtocol) {
+        lock.lock(); defer { lock.unlock() }
+        observers.append(observer)
+    }
+
+    func removeAll() {
+        lock.lock()
+        let monitors = self.monitors, observers = self.observers
+        self.monitors = []; self.observers = []
+        lock.unlock()
+
+        // Both APIs are main-thread-only, and a host is only ever released there.
+        MainActor.assumeIsolated {
+            monitors.forEach(NSEvent.removeMonitor)
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
+    }
+}
+
+/// Which window a pick actually means, on AppKit.
+///
+/// The same problem as on iOS, in AppKit clothing: a sheet, a popover and a modal
+/// are each their own `NSWindow`. Hit-testing only the window Loupe was attached to
+/// would silently annotate whatever sits behind the sheet the person is looking at.
+@MainActor
+enum WindowFinder {
+    /// Takes the list rather than reaching for `NSApp`, so the rule can be tested.
+    /// `orderedIndex` counts from the front, so the smallest wins.
+    static func topmost(among windows: [NSWindow], at screenPoint: CGPoint,
+                        excluding overlay: NSWindow?) -> NSWindow? {
+        windows
+            .filter { $0 !== overlay && $0.isVisible && $0.frame.contains(screenPoint) }
+            .min { $0.orderedIndex < $1.orderedIndex }
+    }
+}
+
 @MainActor
 public final class OverlayHost {
     private let panel: NSPanel
     private let model: OverlayModel
     private weak var host: NSWindow?
-    private var monitors: [Any] = []
-    private var observers: [NSObjectProtocol] = []
+
+    /// Kept in a Sendable box rather than in stored arrays.
+    ///
+    /// Under Swift 6 a `deinit` is nonisolated and may not touch a non-Sendable
+    /// stored property of an isolated class - and an NSEvent monitor is `Any`, while
+    /// a notification observer is `any NSObjectProtocol`. Neither is Sendable. The
+    /// box owns its own locking, so dropping the host still unhooks everything.
+    private let registrations = Registrations()
 
     /// Width of the strip the tray needs, panel padding included.
     private var trayStripWidth: CGFloat { TrayPanel.width + LoupeTheme.Space.lg * 2 }
@@ -55,12 +109,13 @@ public final class OverlayHost {
     }
 
     deinit {
-        let monitors = monitors
-        let observers = observers
-        MainActor.assumeIsolated {
-            monitors.forEach(NSEvent.removeMonitor)
-            observers.forEach(NotificationCenter.default.removeObserver)
-        }
+        registrations.removeAll()
+    }
+
+    /// Unhook everything now rather than waiting to be deallocated.
+    public func stop() {
+        registrations.removeAll()
+        panel.orderOut(nil)
     }
 
     // MARK: - Mode
@@ -84,9 +139,11 @@ public final class OverlayHost {
 
     private func observeHostWindow() {
         for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
-            observers.append(NotificationCenter.default.addObserver(
+            registrations.add(observer: NotificationCenter.default.addObserver(
                 forName: name, object: host, queue: .main
             ) { [weak self] _ in
+                // `Notification` is not Sendable, so it must not be captured out of
+                // this closure. Nothing here needs it: the event is the signal.
                 MainActor.assumeIsolated { self?.apply(self?.model.mode ?? .off) }
             })
         }
@@ -107,12 +164,12 @@ public final class OverlayHost {
 
             MainActor.assumeIsolated { self?.model.toggleAnnotating() }
             return nil
-        }) { monitors.append(hotkey) }
+        }) { registrations.add(monitor: hotkey) }
 
         if let move = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] event in
             MainActor.assumeIsolated { self?.hover() }
             return event
-        }) { monitors.append(move) }
+        }) { registrations.add(monitor: move) }
 
         // Only picking consumes clicks. While commenting, the popover's own buttons
         // need them, so the event goes through untouched.
@@ -123,31 +180,40 @@ public final class OverlayHost {
                 return true
             }
             return consumed ? nil : event
-        }) { monitors.append(click) }
+        }) { registrations.add(monitor: click) }
     }
 
-    /// Where the pointer is, in the host window's top-left coordinates.
-    private var pointerInHost: CGPoint? {
-        guard let host, let content = host.contentView else { return nil }
-        let inWindow = host.convertPoint(fromScreen: NSEvent.mouseLocation)
-        let point = CGPoint(x: inWindow.x, y: content.bounds.height - inWindow.y)
-        guard content.bounds.contains(CGPoint(x: point.x, y: inWindow.y)) else { return nil }
-        return point
+    /// The window under the pointer, and the pointer's position inside it in
+    /// top-left coordinates.
+    ///
+    /// Resolved per event rather than captured at `attach` time, so a sheet or a
+    /// modal - each of which is its own window - is what gets annotated when it is
+    /// the thing on screen.
+    private var target: (window: NSWindow, point: CGPoint)? {
+        let screenPoint = NSEvent.mouseLocation
+        guard let window = WindowFinder.topmost(among: NSApp.windows, at: screenPoint,
+                                                excluding: panel),
+              let content = window.contentView else { return nil }
+
+        let inWindow = window.convertPoint(fromScreen: screenPoint)
+        guard content.bounds.contains(inWindow) else { return nil }
+        return (window, CGPoint(x: inWindow.x, y: content.bounds.height - inWindow.y))
     }
 
     private func hover() {
-        guard case .picking = model.mode, let host, let point = pointerInHost else { return }
-        model.hover(ElementPicker.pick(at: point, in: host)?.ref)
+        guard case .picking = model.mode, let target else { return }
+        model.hover(ElementPicker.pick(at: target.point, in: target.window)?.ref)
     }
 
     private func pick() {
-        guard let host, let point = pointerInHost,
-              let picked = ElementPicker.pick(at: point, in: host) else { return }
-        let size = host.contentView?.bounds.size ?? .zero
+        guard let target,
+              let picked = ElementPicker.pick(at: target.point, in: target.window) else { return }
+        let size = target.window.contentView?.bounds.size ?? .zero
         model.pick(picked.ref,
                    screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: host),
-                   screen: host.title.isEmpty ? nil : host.title,
+                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view,
+                                                                  in: target.window),
+                   screen: target.window.title.isEmpty ? nil : target.window.title,
                    viewport: Rect(x: 0, y: 0, width: size.width, height: size.height))
     }
 }
@@ -172,6 +238,32 @@ final class PassthroughWindow: UIWindow {
     }
 }
 
+/// Which window a pick actually means.
+///
+/// Not the one Loupe was attached to. A dialog, an alert, an action sheet - each of
+/// those is presented in its **own** window, above the app's. Hit-testing the window
+/// captured at `attach` time would silently annotate whatever sits behind the thing
+/// the person is looking at.
+@MainActor
+enum WindowFinder {
+    /// Takes the list rather than the scene, so the rule can be tested. A SwiftPM
+    /// test bundle has no app host and therefore no `UIWindowScene` at all - a
+    /// version of this that only accepted a scene could only ever be skipped.
+    static func topmost(among windows: [UIWindow], excluding overlay: UIWindow?) -> UIWindow? {
+        windows
+            .filter { $0 !== overlay && !$0.isHidden && $0.alpha > 0 }
+            .max { a, b in
+                if a.windowLevel != b.windowLevel { return a.windowLevel < b.windowLevel }
+                // Same level: the key window is the one in front.
+                return (a.isKeyWindow ? 1 : 0) < (b.isKeyWindow ? 1 : 0)
+            }
+    }
+
+    static func topmost(in scene: UIWindowScene, excluding overlay: UIWindow?) -> UIWindow? {
+        topmost(among: scene.windows, excluding: overlay)
+    }
+}
+
 /// Puts the overlay above the app on iPhone and iPad.
 ///
 /// Annotate mode is entered from a floating pill rather than a shake. A shake read
@@ -180,32 +272,48 @@ final class PassthroughWindow: UIWindow {
 /// that wants to wire the gesture from its own responder, where it does work.
 @MainActor
 public final class OverlayHost {
-    private let window: PassthroughWindow
+    /// Internal rather than private so tests can assert on it without the type
+    /// growing a test-only API.
+    /// One step above `.alert`, which is where dialogs, action sheets and alerts
+    /// present themselves.
+    static let windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
+
+    /// Internal rather than private so tests can assert on it without the type
+    /// growing a test-only API.
+    let window: PassthroughWindow
     private let model: OverlayModel
-    private weak var host: UIWindow?
+    private weak var scene: UIWindowScene?
 
     /// Fails when the host window has no scene, rather than inventing one. A window
     /// without a scene cannot have a sibling above it, so there is nothing to build.
     public init?(model: OverlayModel, host: UIWindow) {
         guard let scene = host.windowScene else { return nil }
         self.model = model
-        self.host = host
+        self.scene = scene
 
         window = PassthroughWindow(windowScene: scene)
-        window.windowLevel = host.windowLevel + 1
+        // Above alerts, not above the host.
+        //
+        // `host.windowLevel + 1` put the overlay *underneath* any dialog, because a
+        // dialog gets its own window at `.alert`. The pill was then behind the
+        // dialog, and a tap where it appeared landed on the dialog's dimming view -
+        // which dismissed the dialog instead of starting annotate mode.
+        window.windowLevel = Self.windowLevel
         window.backgroundColor = .clear
         window.isHidden = false
 
-        // Weak on both: the overlay must never be the reason the host window or the
-        // model stays alive.
-        let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak host] point in
-            guard let model, let host,
-                  let picked = ElementPicker.pick(at: point, in: host) else { return }
+        let overlayWindow = window
+        // Weak on both: the overlay must never be the reason a window or the model
+        // stays alive.
+        let content = OverlayRootWithPill(model: model, onTap: { [weak model, weak scene] point in
+            guard let model, let scene,
+                  let target = WindowFinder.topmost(in: scene, excluding: overlayWindow),
+                  let picked = ElementPicker.pick(at: point, in: target) else { return }
             model.pick(picked.ref,
                        screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-                       contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: host),
+                       contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: target),
                        viewport: Rect(x: 0, y: 0,
-                                      width: host.bounds.width, height: host.bounds.height))
+                                      width: target.bounds.width, height: target.bounds.height))
         })
 
         let controller = UIHostingController(rootView: content)
@@ -225,12 +333,20 @@ private struct OverlayRootWithPill: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
+            // The tap catcher exists only while picking, and sits *under* the
+            // panels so the popover's own buttons still get their touches.
+            //
+            // It used to be `.contentShape(Rectangle())` on the whole overlay, all
+            // the time, which made an idle overlay hit-testable across the entire
+            // screen - one SwiftUI implementation detail away from making the host
+            // app unusable.
+            if case .picking = model.mode {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { point in onTap(point) }
+            }
+
             OverlayRoot(model: model)
-                .contentShape(Rectangle())
-                .onTapGesture { point in
-                    guard case .picking = model.mode else { return }
-                    onTap(point)
-                }
 
             if model.mode == .off {
                 Button {

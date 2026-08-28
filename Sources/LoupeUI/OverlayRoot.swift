@@ -29,6 +29,9 @@ public struct OverlayRoot: View {
                     // to look and behave exactly as it normally does.
                     LoupeTheme.Colors.scrim.color
                         .ignoresSafeArea()
+                        // Dimming, never a target: the tap belongs to whatever the
+                        // person is pointing at underneath it.
+                        .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
 

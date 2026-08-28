@@ -13,13 +13,10 @@ import LoupeCore
 @MainActor
 final class EndToEndTests: XCTestCase {
 
-    private var directory = URL(fileURLWithPath: NSTemporaryDirectory())
-
-    override func setUp() {
-        super.setUp()
-        directory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent(UUID().uuidString)
-    }
+    // See SessionPersistenceTests: a `let` of a Sendable type is readable from the
+    // nonisolated tearDown, and XCTest gives each test its own instance regardless.
+    private let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent(UUID().uuidString)
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: directory)

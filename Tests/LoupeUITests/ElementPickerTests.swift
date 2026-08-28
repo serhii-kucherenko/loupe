@@ -93,4 +93,56 @@ final class ElementPickerTests: XCTestCase {
         XCTAssertNil(picked?.ref.accessibilityID)
     }
 }
+
+/// The AppKit half of the same bug reported from an iPad: a sheet, a popover and a
+/// modal are each their own `NSWindow`, so hit-testing only the window Loupe was
+/// attached to annotates whatever sits behind the thing on screen.
+@MainActor
+final class WindowFinderTests: XCTestCase {
+
+    private func window(_ frame: NSRect, title: String) -> NSWindow {
+        let window = NSWindow(contentRect: frame, styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.title = title
+        window.contentView = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        window.orderFront(nil)
+        return window
+    }
+
+    func testItTakesTheFrontmostWindowUnderThePointer() {
+        let behind = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "app")
+        let sheet = window(NSRect(x: 50, y: 50, width: 200, height: 150), title: "sheet")
+
+        // A point inside both. The sheet was ordered front last, so it is in front.
+        let found = WindowFinder.topmost(among: [behind, sheet],
+                                         at: CGPoint(x: 100, y: 100), excluding: nil)
+        XCTAssertEqual(found?.title, "sheet")
+    }
+
+    func testAPointOutsideEveryWindowPicksNothing() {
+        let app = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "app")
+        XCTAssertNil(WindowFinder.topmost(among: [app],
+                                          at: CGPoint(x: 9000, y: 9000), excluding: nil))
+    }
+
+    /// Loupe's own panel is never the answer, or a pick would annotate the tool.
+    func testTheOverlayPanelIsNeverPicked() {
+        let app = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "app")
+        let overlay = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "overlay")
+
+        let found = WindowFinder.topmost(among: [app, overlay],
+                                         at: CGPoint(x: 100, y: 100), excluding: overlay)
+        XCTAssertEqual(found?.title, "app")
+    }
+
+    func testAHiddenWindowIsNotWhatSomeoneIsLookingAt() {
+        let visible = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "app")
+        let closed = window(NSRect(x: 0, y: 0, width: 400, height: 300), title: "closed")
+        closed.orderOut(nil)
+
+        XCTAssertEqual(WindowFinder.topmost(among: [visible, closed],
+                                            at: CGPoint(x: 100, y: 100),
+                                            excluding: nil)?.title, "app")
+    }
+}
 #endif

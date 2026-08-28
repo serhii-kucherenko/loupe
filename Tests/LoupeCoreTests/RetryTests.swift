@@ -40,7 +40,7 @@ final class RetryTests: XCTestCase {
     func testDrainRetriesUntilTheNetworkComesBack() async throws {
         let inner = FailsNTimes(failures: 2)
         let queue = QueuedTransport(wrapping: inner, directory: directory)
-        try? await queue.send(bundle())
+        _ = try? await queue.send(bundle())
 
         try await queue.drain(attempts: 4, initialDelay: 0.001)
 
@@ -51,7 +51,7 @@ final class RetryTests: XCTestCase {
     func testDrainGivesUpAfterTheLastAttemptAndKeepsTheBacklog() async {
         let inner = FailsNTimes(failures: 99)
         let queue = QueuedTransport(wrapping: inner, directory: directory)
-        try? await queue.send(bundle())
+        _ = try? await queue.send(bundle())
 
         do {
             try await queue.drain(attempts: 2, initialDelay: 0.001)

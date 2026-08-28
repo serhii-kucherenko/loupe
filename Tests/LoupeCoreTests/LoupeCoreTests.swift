@@ -22,6 +22,7 @@ private struct FailingTransport: Transport {
 
 private let testApp = AppInfo(name: "Demo", platform: "macOS")
 
+@MainActor
 final class AnnotationSessionTests: XCTestCase {
 
     func testTrayCollectsAcrossPicks() {
@@ -104,6 +105,7 @@ final class FileTransportTests: XCTestCase {
         XCTAssertTrue(dir.isFileURL)
     }
 
+    @MainActor
     func testWritesJSONAndScreenshotsSideBySide() async throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
