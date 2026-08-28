@@ -47,6 +47,25 @@ public final class QueuedTransport: Transport, @unchecked Sendable {
         }
     }
 
+    /// Same as `drain`, but keeps trying while the network is still coming back.
+    ///
+    /// The delay doubles each time. The caller decides when to start this - app
+    /// foreground, a reachability change - because only the caller knows whether
+    /// waiting is worth it.
+    public func drain(attempts: Int, initialDelay: TimeInterval = 1) async throws {
+        var delay = initialDelay
+        for attempt in 1...max(1, attempts) {
+            do {
+                try await drain()
+                return
+            } catch {
+                guard attempt < attempts else { throw error }
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                delay *= 2
+            }
+        }
+    }
+
     // MARK: - Disk
 
     /// Fixed-width seconds keep the names sortable as plain text, and the session id
