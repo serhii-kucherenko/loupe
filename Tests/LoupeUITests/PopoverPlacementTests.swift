@@ -59,3 +59,48 @@ final class PopoverPlacementTests: XCTestCase {
                           "60pt above beats 40pt below")
     }
 }
+
+/// SER-697, found on an iPad: pick anything low on the screen, the popover opens
+/// below it, the keyboard rises, and Cancel and Save end up about 190pt underneath
+/// it. Return is no escape either - the field is `axis: .vertical`, so Return
+/// inserts a newline.
+final class PopoverKeyboardTests: XCTestCase {
+
+    private let popover = CGSize(width: 320, height: 260)
+
+    func testItFlipsAboveWhenTheKeyboardHasTakenTheRoomBelow() {
+        let element = CGRect(x: 40, y: 620, width: 300, height: 70)
+        let window = CGSize(width: 834, height: 1200)
+
+        // Without the keyboard there is plenty of room below.
+        let dry = PopoverPlacement.frame(for: element, popover: popover, in: window)
+        XCTAssertGreaterThan(dry.minY, element.maxY)
+
+        // With it, the usable container ends at 800 and below no longer fits.
+        let wet = PopoverPlacement.frame(
+            for: element, popover: popover,
+            in: CGSize(width: window.width, height: window.height - 400))
+        XCTAssertLessThan(wet.maxY, element.minY, "it must not sit under the keyboard")
+    }
+
+    func testItStaysBelowWhenTheKeyboardStillLeavesRoom() {
+        let element = CGRect(x: 40, y: 80, width: 300, height: 70)
+        let frame = PopoverPlacement.frame(
+            for: element, popover: popover, in: CGSize(width: 834, height: 800))
+
+        XCTAssertGreaterThan(frame.minY, element.maxY)
+    }
+
+    // The element itself is under the keyboard: there is no good answer, but the
+    // popover must still be reachable.
+    func testAPopoverIsAlwaysInsideTheUsableArea() {
+        let element = CGRect(x: 40, y: 1100, width: 300, height: 70)
+        let usable = CGSize(width: 834, height: 800)
+
+        let frame = PopoverPlacement.frame(for: element, popover: popover, in: usable)
+
+        XCTAssertGreaterThanOrEqual(frame.minY, 0)
+        XCTAssertLessThanOrEqual(frame.maxY, usable.height + 0.5)
+    }
+}
+

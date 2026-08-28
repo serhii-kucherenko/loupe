@@ -154,6 +154,14 @@ enum DemoScene {
                     report(at: underTheOldBar, in: window, label: "under the old bar")
                 }
 
+                // SER-697: pick low on the screen, where the keyboard lands on top
+                // of Save unless the popover knows the keyboard is there.
+                if scene == "lowpick" {
+                    let low = CGPoint(x: size.width * 0.26, y: size.height * 0.66)
+                    pick(at: low, in: window, model: model)
+                    print("LOUPE-LOW picked at \(low) of \(size)")
+                }
+
                 if scene == "hover" || scene == "pick" || scene == "tray" {
                     report(at: row, in: window, label: "row")
                     pick(at: row, in: window, model: model)

@@ -459,7 +459,7 @@ public final class OverlayHost {
             else { return }
             model.resolveDraftAndResumePicking()
             deliver(ElementPicker.capture(rect: rect, in: target), to: model, from: target)
-        })
+        }, window: window)
 
         let controller = UIHostingController(rootView: content.ignoresSafeArea())
         controller.view.backgroundColor = .clear
@@ -544,8 +544,12 @@ private struct OverlayRootWithPill: View {
     @ObservedObject var model: OverlayModel
     var onTap: (CGPoint) -> Void
     var onDrag: (CGRect) -> Void
+    /// The overlay's own window, for turning the keyboard's screen frame into an
+    /// inset. Weak-ish by construction: the view is rebuilt, never stored.
+    weak var window: UIWindow?
 
     @State private var safeArea = EdgeInsets()
+    @State private var keyboardInset: CGFloat = 0
     @State private var dragOrigin: CGPoint?
 
     var body: some View {
@@ -585,12 +589,21 @@ private struct OverlayRootWithPill: View {
 
             // The enter/exit control lives inside `OverlayRoot` so both platforms
             // get the same one in the same place.
-            OverlayRoot(model: model, safeArea: safeArea)
+            OverlayRoot(model: model, safeArea: safeArea, keyboardInset: keyboardInset)
 
             SafeAreaReader { safeArea = $0 }
         }
         .onPreferenceChange(InteractiveRegionsKey.self) { regions in
             MainActor.assumeIsolated { model.interactiveRegions = regions }
+        }
+        // The popover opens before the keyboard rises, so this has to re-place it
+        // rather than only being read once.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
+                    as? CGRect,
+                  let height = window?.bounds.height else { return }
+            keyboardInset = max(0, height - end.minY)
         }
     }
 

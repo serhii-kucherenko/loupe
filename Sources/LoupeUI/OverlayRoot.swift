@@ -26,9 +26,21 @@ public struct OverlayRoot: View {
     /// knows the real numbers, so they are passed in.
     var safeArea: EdgeInsets = EdgeInsets()
 
-    public init(model: OverlayModel, safeArea: EdgeInsets = EdgeInsets()) {
+    /// How much of the bottom of the window the keyboard is covering.
+    ///
+    /// The popover places itself below the element when there is room. "Room" was
+    /// measured against the whole window, which does not know its bottom 400pt is
+    /// unusable - so picking anything low on an iPad put Cancel and Save under the
+    /// keyboard, with no way to commit the note at all. Return does not help: the
+    /// field is `axis: .vertical`, so Return inserts a newline.
+    var keyboardInset: CGFloat = 0
+
+    public init(model: OverlayModel,
+                safeArea: EdgeInsets = EdgeInsets(),
+                keyboardInset: CGFloat = 0) {
         self.model = model
         self.safeArea = safeArea
+        self.keyboardInset = keyboardInset
     }
 
     public var body: some View {
@@ -80,7 +92,8 @@ public struct OverlayRoot: View {
                     let frame = PopoverPlacement.frame(
                         for: element,
                         popover: CGSize(width: CommentPopover.width, height: 260),
-                        in: geometry.size)
+                        in: CGSize(width: geometry.size.width,
+                                   height: geometry.size.height - keyboardInset))
 
                     CommentPopover(
                         pick: pick,
