@@ -402,6 +402,10 @@ private struct OverlayRootWithPill: View {
                 .buttonStyle(LoupeButtonStyle(kind: .primary))
                 .loupePanel()
                 .padding(LoupeTheme.Space.lg)
+                // The overlay ignores the safe area, so without this the pill sits
+                // in the home indicator's space.
+                .padding(.bottom, safeArea.bottom)
+                .padding(.trailing, safeArea.trailing)
                 .accessibilityLabel("Start annotating")
             }
         }

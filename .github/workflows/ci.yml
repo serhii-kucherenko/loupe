@@ -98,7 +98,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
   ipad:
-    name: Build the demo app (iPad)
+    name: Build the demo app (iPad and iPhone)
     # Not macos-14 like the other Apple jobs. XcodeGen writes the newest project
     # format it knows and offers no way to pin an older one, so the generated
     # project cannot be opened by the Xcode on that image at all
@@ -122,16 +122,18 @@ jobs:
         working-directory: Examples/LoupeDemoApp
         run: xcodegen generate
 
-      - name: Build for the iPad Simulator
+      # A generic destination, because this job only builds. Naming a device meant
+      # parsing `simctl list`, and the model suffix is part of the name rather than
+      # the UDID - "iPad Pro 11-inch (M4)" was cut to "iPad Pro 11-inch", which
+      # matches nothing.
+      - name: Build for the iOS Simulator
         working-directory: Examples/LoupeDemoApp
         run: |
           set -o pipefail
-          NAME=$(xcrun simctl list devices available | grep -oE '^ +iPad [^(]+' | head -1 | xargs)
-          echo "Using $NAME"
           xcodebuild build \
             -project LoupeDemo.xcodeproj \
             -scheme LoupeDemo \
-            -destination "platform=iOS Simulator,name=$NAME" \
+            -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
