@@ -38,3 +38,8 @@ contract: additive changes only, no breaking renames without a major.
   another realm and the check silently fails. Check `tagName` or duck-type instead.
 - After changing anything visible, re-run the snapshots and look at them:
   `cd Examples/LoupeDemo && swift run LoupeSnapshots ../../docs/screenshots`.
+- For the web, headless Chrome `--screenshot` **races the page** even at
+  `--virtual-time-budget=15000`: roughly one run in three captures before the module
+  script has finished, and the result looks exactly like the overlay failing to
+  appear. Confirm with `--dump-dom` (the scene hook sets `<title>ready`) before
+  believing a blank one, and take the screenshot again rather than chasing it.
