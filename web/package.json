@@ -21,7 +21,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "sync-tokens": "node scripts/sync-tokens.mjs",
-    "test": "npm run sync-tokens && tsc && node --test \"dist/test/*.test.js\""
+    "test": "npm run sync-tokens && tsc && node --test \"dist/test/*.test.js\"",
+    "prepublishOnly": "rm -rf dist && npm run sync-tokens && tsc && node --test \"dist/test/*.test.js\""
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
@@ -37,5 +38,8 @@
     "ai-agent",
     "feedback",
     "screenshot"
-  ]
+  ],
+  "engines": {
+    "node": ">=18"
+  }
 }
