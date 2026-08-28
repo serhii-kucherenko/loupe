@@ -1,0 +1,9 @@
+# Default reviewer for everything.
+*                       @serhii-kucherenko
+
+# The picker's meaningful-ancestor walk is the correctness core of the SDK:
+# a wrong crop makes every downstream step reason about the wrong element.
+/Sources/LoupeUI/       @serhii-kucherenko
+
+# The bundle format is a public contract with anything consuming Loupe.
+/Sources/LoupeCore/     @serhii-kucherenko

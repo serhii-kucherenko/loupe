@@ -1,0 +1,47 @@
+name: The picker chose the wrong element
+description: You pointed at one thing and Loupe captured another. The most useful report right now.
+labels: ["picker", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the correctness core of the SDK. If the crop is wrong, everything
+        downstream reasons about the wrong element, so these reports matter most.
+  - type: input
+    id: pointed-at
+    attributes:
+      label: What did you point at?
+      placeholder: The Save button at the bottom of the form
+    validations:
+      required: true
+  - type: input
+    id: captured
+    attributes:
+      label: What did it capture instead?
+      placeholder: The text label inside the button
+    validations:
+      required: true
+  - type: textarea
+    id: crop
+    attributes:
+      label: The crop
+      description: Drag in the PNG from the bundle, if you can share it.
+  - type: textarea
+    id: element-ref
+    attributes:
+      label: The element reference from bundle.json
+      description: The `element` object for that annotation. Redact anything sensitive.
+      render: json
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, iPadOS, iOS, other]
+    validations:
+      required: true
+  - type: textarea
+    id: view-code
+    attributes:
+      label: The view code, if you can share it
+      description: Especially whether the view has an accessibility identifier.
+      render: swift

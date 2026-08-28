@@ -1,0 +1,19 @@
+name: Feature request
+description: Something Loupe should do and does not.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, not the solution. What were you doing when this got in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What do you think should happen?
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What are you doing instead today?

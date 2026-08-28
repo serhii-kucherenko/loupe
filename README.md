@@ -19,7 +19,7 @@ you a fix. Loupe is the capture side of that.
 
 ## Related: Autopilot
 
-**Loupe captures. [Autopilot](../../autopilot/repo) decides what to do about it.**
+**Loupe captures. [Autopilot](https://github.com/serhii-kucherenko/autopilot) decides what to do about it.**
 
 Loupe hands over a bundle and stops there. Autopilot is the loop on the other side: triage
 into tickets, an agent that builds them, staging, and the review that closes it.
@@ -31,23 +31,27 @@ the capture without adopting the loop. Autopilot can equally take input from any
 | | What it is | Where |
 |---|---|---|
 | **Loupe** | the annotation SDK, in your app | this repo · [Linear](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084) |
-| **Autopilot** | the loop the bundles feed | `../../autopilot/repo` · [Linear](https://linear.app/serhii-kucherenko/project/autopilot-0e1846433181) |
+| **Autopilot** | the loop the bundles feed | https://github.com/serhii-kucherenko/autopilot · [Linear](https://linear.app/serhii-kucherenko/project/autopilot-0e1846433181) |
 
 Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
 
 ## Install
 
-Not published yet, so point at the checkout:
+Swift Package Manager. Pre-1.0, so pin a branch until the first tag:
 
 ```swift
-.package(path: "../loupe")
+.package(url: "https://github.com/serhii-kucherenko/loupe", branch: "main")
 ```
 
-Once it is on GitHub:
+Then add the products you need. `LoupeCore` alone is enough to read or write bundles;
+`LoupeUI` brings in the picker and the platform code.
 
 ```swift
-.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.0")
+.product(name: "LoupeCore", package: "loupe"),
+.product(name: "LoupeUI", package: "loupe"),
 ```
+
+Requires Swift 5.9, macOS 13, or iOS 16.
 
 ## Use
 

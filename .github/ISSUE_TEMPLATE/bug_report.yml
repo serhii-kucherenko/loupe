@@ -1,0 +1,37 @@
+name: Bug report
+description: Something else is broken.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. Start Loupe with ...
+        2. Pick ...
+        3. Send
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, iPadOS, iOS, other]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Loupe version, Swift version, Xcode version
+    validations:
+      required: true
