@@ -44,11 +44,18 @@ Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
 Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.0")
+.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.1")
 ```
 
-Pre-1.0 on purpose: the bundle format is settled, but the SDK API has not yet been used
-by an app other than the demo, so the shape may still move.
+Pre-1.0 on purpose: the bundle format is settled, but the SDK API is young, so the shape
+may still move. Take 0.1.1 or later: 0.1.0 predates Mac Catalyst support and the fix that
+makes the overlay's own controls tappable on iOS.
+
+**If SwiftPM refuses to resolve Loupe at all**, with a fingerprint or "not signed with the
+same identity" error, delete `~/Library/org.swift.swiftpm/security/fingerprints/loupe-*.json`
+and resolve again. The `v0.1.0` tag was moved once, before the first adopter existed, and
+SwiftPM remembers the commit a tag pointed at the first time it saw it. No tag will be
+moved again.
 
 Then add the products you need. `LoupeCore` alone is enough to read or write bundles;
 `LoupeUI` brings in the picker and the platform code.

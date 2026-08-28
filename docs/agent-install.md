@@ -185,7 +185,7 @@ the field rather than inventing a value.
 `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.0"),
+.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.1"),
 ```
 
 ```swift

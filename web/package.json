@@ -1,6 +1,6 @@
 {
   "name": "loupe-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Point at your running web app, say what is wrong, and an agent gets everything it needs.",
   "license": "MIT",
   "author": "Serhii Kucherenko",
