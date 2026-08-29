@@ -127,6 +127,17 @@ and backgrounds into one shared layer, so a point over a heading is indistinguis
 from a point over blank space. Rather than drop the note, the SDK captures a box
 around the point.
 
+**Web content inside a native app is the strongest case of this, and it is not a
+bug.** A `WKWebView` is one `UIView` to a native picker; the paragraphs, buttons and
+links inside it are the web engine's, and no amount of climbing reaches them. So a
+tap inside a reader, a help page or an embedded checkout comes back as a region with
+an empty `className` and no `label` - a picture, a rectangle, and nothing else.
+
+Read an empty `className` as *there was nothing to name*, never as a failed capture.
+The crop and the context shot are still correct and still show what the person was
+looking at. If you need element identity inside web content, the web SDK running
+*inside* that page is the thing that can give it to you; a native picker cannot.
+
 Either way: read `bounds`, and let the crop and the context shot carry the rest.
 
 ### `trace[]`

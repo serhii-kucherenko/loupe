@@ -29,6 +29,12 @@ contract: additive changes only, no breaking renames without a major.
   depends on `LoupeUI`, never the reverse: a host that wants capture only takes
   `LoupeUI` and never compiles a line of Linear. The dependency that matters is the
   one that does not exist.
+- **"Executed 0 tests" with exit 0 is a stale test bundle, not a passing run.** After
+  a package change `xcodebuild test` can silently run nothing and succeed, and
+  whatever artefact you then read - a screenshot, a bundle on a simulator container -
+  is the *previous* run's. That very nearly reported a broken fix as working. Check
+  the count, and check an artefact's mtime before believing anything you read off a
+  container. `build-for-testing` then `test-without-building` clears it.
 - **`swift test` is the macOS suite only. Run the other two before pushing.** Both
   have caught things nothing on this machine could:
 
