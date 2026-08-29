@@ -328,14 +328,18 @@ final class LinearSettingsFlowTests: XCTestCase {
     /// configured and the next send fails for a reason nobody can see.
     func testSigningOutForgetsTheDestinationTooAndNotJustTheKey() async {
         let store = settings()
+        // Both halves injected: the iOS simulator has no Keychain, so a real delete
+        // is refused and `signOut` correctly refuses along with it - which would make
+        // this assert the wrong thing entirely.
         let flow = LinearSettingsFlow(settings: store,
                                       makeDirectory: directory(Recorder()),
-                                      store: { _ in })
+                                      store: { _ in },
+                                      clear: {})
         await flow.test(key: "lin_api_abc")
         XCTAssertTrue(flow.save(key: "lin_api_abc"))
         XCTAssertNotNil(store.destination)
 
-        flow.signOut()
+        XCTAssertTrue(flow.signOut())
 
         XCTAssertEqual(flow.connection, .idle)
         XCTAssertNil(flow.person)
@@ -344,6 +348,23 @@ final class LinearSettingsFlowTests: XCTestCase {
         XCTAssertTrue(flow.projects.isEmpty)
         XCTAssertFalse(flow.canSave)
         XCTAssertNil(store.destination, "signing out must not leave a team behind")
+    }
+
+    /// A delete the Keychain refuses must not draw a signed-out panel over a
+    /// credential that is still sitting there.
+    func testARefusedDeleteLeavesEverythingAloneAndSaysSo() async {
+        let store = settings()
+        let flow = LinearSettingsFlow(settings: store,
+                                      makeDirectory: directory(Recorder()),
+                                      store: { _ in },
+                                      clear: { throw LinearError.couldNotStore(errSecMissingEntitlement) })
+        await flow.test(key: "lin_api_abc")
+        XCTAssertTrue(flow.save(key: "lin_api_abc"))
+
+        XCTAssertFalse(flow.signOut())
+        XCTAssertNotNil(store.destination, "nothing was removed, so nothing changes")
+        XCTAssertEqual(flow.connection,
+                       .failed(LinearError.couldNotStore(errSecMissingEntitlement).description))
     }
 
     func testAPersonalKeyIsSentBareAndAnythingElseAsABearer() {

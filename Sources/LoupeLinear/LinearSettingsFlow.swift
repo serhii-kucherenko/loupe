@@ -65,15 +65,21 @@ public final class LinearSettingsFlow: ObservableObject {
     /// refuses Keychain writes: an app with no Keychain entitlement is refused
     /// outright on Mac Catalyst, and that used to be entirely silent.
     private let store: (LinearCredential) throws -> Void
+    /// The other half of the same seam. Symmetric with `store` on purpose: a test
+    /// that can inject a write and not a delete ends up asserting through a real
+    /// Keychain for half its work, which on the iOS simulator means refusing.
+    private let clear: () throws -> Void
 
     public init(settings: LinearSettings = LinearSettings(),
                 makeDirectory: @escaping (LinearCredential) -> LinearDirectory = {
                     LinearDirectory(credential: $0)
                 },
-                store: ((LinearCredential) throws -> Void)? = nil) {
+                store: ((LinearCredential) throws -> Void)? = nil,
+                clear: (() throws -> Void)? = nil) {
         self.settings = settings
         self.makeDirectory = makeDirectory
         self.store = store ?? { try settings.save($0) }
+        self.clear = clear ?? { try settings.clearCredential() }
     }
 
     /// Whether Save would do anything. A note has to have somewhere to go.
@@ -198,7 +204,7 @@ public final class LinearSettingsFlow: ObservableObject {
     @discardableResult
     public func signOut() -> Bool {
         do {
-            try settings.clearCredential()
+            try clear()
         } catch {
             connection = .failed(Self.readable(error))
             return false
