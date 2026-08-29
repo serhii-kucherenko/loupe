@@ -22,6 +22,7 @@ public struct LinearSettingsSheet: View {
     private let settings: LinearSettings
 
     @State private var key = ""
+    @State private var newProjectName = ""
 
     public init(settings: LinearSettings = LinearSettings(),
                 oauth: LinearOAuth? = nil,
@@ -83,6 +84,10 @@ public struct LinearSettingsSheet: View {
 
                 picker("Project", selection: $flow.projectID,
                        options: [("", "None")] + flow.projects.map { ($0.id, $0.name) })
+
+                if canCreateProjects {
+                    newProject
+                }
             }
 
             footer
@@ -223,6 +228,55 @@ public struct LinearSettingsSheet: View {
             .buttonStyle(LoupeButtonStyle(kind: .primary))
             .disabled(!flow.canSave)
         }
+    }
+
+    /// Whether to offer making one at all.
+    ///
+    /// A personal API key carries the permissions of whoever issued it, so it can.
+    /// An OAuth token only can if the application asked for `write` - Linear has no
+    /// targeted project scope - and offering a button that can only ever fail is
+    /// worse than not offering one.
+    private var canCreateProjects: Bool {
+        oauth?.canCreateProjects ?? true
+    }
+
+    /// Making a project without leaving the app.
+    ///
+    /// Under Team and Project because that is the order it narrows, and because a
+    /// project belongs to a team: there is nothing to create until one is chosen.
+    /// The person who needs this most is annotating something new on an iPad with no
+    /// keyboard, and sending them to a browser is where the session ends.
+    private var newProject: some View {
+        field("New project") {
+            HStack(spacing: LoupeTheme.Space.sm) {
+                TextField("Name", text: $newProjectName)
+                    .textFieldStyle(.plain)
+                    .padding(LoupeTheme.Space.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.control,
+                                         style: .continuous)
+                            .strokeBorder(LoupeTheme.Colors.line.color,
+                                          lineWidth: LoupeTheme.Stroke.hairline))
+                    .accessibilityLabel("New project name")
+
+                Button(flow.creatingProject ? "Creating\u{2026}" : "Create") {
+                    Task {
+                        if await flow.createProject(named: newProjectName) {
+                            newProjectName = ""
+                        }
+                    }
+                }
+                .buttonStyle(LoupeButtonStyle(kind: .secondary))
+                .disabled(cannotCreateYet)
+                .accessibilityLabel("Create project")
+            }
+        }
+    }
+
+    private var cannotCreateYet: Bool {
+        flow.creatingProject
+            || flow.teamID.isEmpty
+            || newProjectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// A labelled row. The workspace uses one without a control, because it is not a

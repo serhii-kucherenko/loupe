@@ -36,6 +36,10 @@ public final class LinearSettingsFlow: ObservableObject {
     @Published public var teamID = ""
     @Published public var projectID = ""
 
+    /// A project is being made right now, so the control can say so and cannot be
+    /// pressed twice - a second press is how two projects with one name happen.
+    @Published public private(set) var creatingProject = false
+
     /// The credential that has actually been proved to work.
     ///
     /// Kept, rather than rebuilt from the key field wherever it is needed. After
@@ -146,6 +150,38 @@ public final class LinearSettingsFlow: ObservableObject {
         teamID = ""
         projectID = ""
         connection = .idle
+    }
+
+    /// Makes a project and points the panel at it.
+    ///
+    /// Selected on success, because creating a project and then having to find it in
+    /// the picker is the same failure as the picker not refreshing at all.
+    ///
+    /// - Returns: `false` when it did not work, with `connection` carrying the reason.
+    ///   The panel must stay open on a `false`: closing is what made the refused
+    ///   Keychain write look like success, and this can be refused for a reason
+    ///   nobody would guess - an OAuth token that files issues cannot create projects.
+    @discardableResult
+    public func createProject(named name: String) async -> Bool {
+        guard let credential, !teamID.isEmpty, !creatingProject else { return false }
+        creatingProject = true
+        defer { creatingProject = false }
+
+        do {
+            let project = try await makeDirectory(credential)
+                .createProject(named: name, teamID: teamID)
+            await loadProjects()
+            // Even if the list came back without it - a project made a moment ago is
+            // where the notes should go, and the picker catching up is not his problem.
+            if !projects.contains(where: { $0.id == project.id }) {
+                projects.append(project)
+            }
+            projectID = project.id
+            return true
+        } catch {
+            connection = .failed(Self.readable(error))
+            return false
+        }
     }
 
     /// Stores whatever is now true, and says whether it took.

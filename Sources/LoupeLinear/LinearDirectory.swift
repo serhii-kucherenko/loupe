@@ -75,6 +75,90 @@ public struct LinearDirectory: Sendable {
         }
     }
 
+    /// Makes a project, or hands back the one that is already there.
+    ///
+    /// Somebody annotating an app for the first time is exactly the person whose
+    /// project does not exist yet, and sending them to a browser mid-annotation is
+    /// where the session ends.
+    ///
+    /// It looks before it creates, because `projectCreate` is not idempotent the way
+    /// `issueCreate` is: a retry after a dropped connection would otherwise leave two
+    /// projects with the same name and no way to tell which one the notes went to.
+    /// Matching is case- and whitespace-insensitive, since "Reco" and "reco " are the
+    /// same project to the person typing them and two different ones to Linear.
+    ///
+    /// - Throws: `.notPermitted` when the credential cannot create projects. An OAuth
+    ///   token scoped `issues:create` files issues perfectly well and is refused here,
+    ///   which is a confusing thing to meet without being told why.
+    public func createProject(named name: String, teamID: String) async throws -> Project {
+        let wanted = Self.comparable(name)
+        guard !wanted.isEmpty else {
+            throw LinearError.api("A project needs a name.")
+        }
+
+        if let existing = try await projects(teamID: teamID)
+            .first(where: { Self.comparable($0.name) == wanted }) {
+            return existing
+        }
+
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let data: [String: Any]
+        do {
+            data = try await query("""
+            mutation CreateProject($name: String!, $teams: [String!]!) {
+              projectCreate(input: { name: $name, teamIds: $teams }) {
+                success
+                project { id name }
+              }
+            }
+            """, ["name": trimmed, "teams": [teamID]])
+        } catch let error as LinearError {
+            throw Self.readableCreateFailure(error)
+        }
+
+        let result = data["projectCreate"] as? [String: Any]
+        guard result?["success"] as? Bool == true,
+              let project = result?["project"] as? [String: Any],
+              let id = project["id"] as? String,
+              let created = project["name"] as? String
+        else {
+            throw LinearError.api("Linear did not create the project and did not say why.")
+        }
+        return Project(id: id, name: created)
+    }
+
+    /// Linear refuses a too-narrow token the same way it refuses a wrong one, so the
+    /// message has to name the likely cause rather than repeat "no permission".
+    private static func readableCreateFailure(_ error: LinearError) -> LinearError {
+        switch error {
+        case .notPermitted, .credentialRejected:
+            return .notPermitted(
+                "creating projects. A Linear sign-in only asks to create issues. "
+                + "Sign in again to grant write access, or paste a personal API key.")
+        case .api(let message) where Self.readsAsScopeRefusal(message):
+            return .notPermitted(
+                "creating projects. A Linear sign-in only asks to create issues. "
+                + "Sign in again to grant write access, or paste a personal API key.")
+        default:
+            return error
+        }
+    }
+
+    /// GraphQL puts an access failure in the errors array with a 200, so the status
+    /// code cannot be relied on to tell a refusal from anything else.
+    private static func readsAsScopeRefusal(_ message: String) -> Bool {
+        let lowered = message.lowercased()
+        return lowered.contains("access denied")
+            || lowered.contains("not authorized")
+            || lowered.contains("scope")
+            || lowered.contains("permission")
+    }
+
+    /// Two names are the same project when a person would call them the same.
+    static func comparable(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     private func query(_ text: String,
                        _ variables: [String: Any] = [:]) async throws -> [String: Any] {
         var request = URLRequest(url: endpoint)

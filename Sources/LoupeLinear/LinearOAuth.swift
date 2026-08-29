@@ -11,23 +11,46 @@ import AuthenticationServices
 /// ship a secret could not do OAuth honestly: anything in the binary is not a
 /// secret, and pretending otherwise is worse than an API key field.
 ///
-/// The scope is `issues:create`, not `write`. Loupe files issues; it has no business
-/// being able to delete them.
+/// The default scope is `issues:create`, not `write`. Loupe files issues; it has no
+/// business being able to delete them.
 public struct LinearOAuth: Sendable {
 
     public static let authorizeURL = URL(string: "https://linear.app/oauth/authorize")!
     public static let tokenURL = URL(string: "https://api.linear.app/oauth/token")!
-    public static let scope = "issues:create"
+
+    /// What Loupe needs to do its job, and nothing else.
+    public static let defaultScopes = ["issues:create"]
+
+    /// What it takes to also create a project from the settings panel.
+    ///
+    /// Linear has no targeted project scope - the list is `read`, `write`,
+    /// `issues:create`, `comments:create`, `timeSchedule:write` and `admin` - so
+    /// creating a project means asking for `write`, which is write access to the
+    /// whole account. That is a real widening and it is why it is a separate
+    /// constant a host has to reach for, rather than the default.
+    ///
+    /// It is not silent: Linear's own consent screen lists what is being granted,
+    /// so whoever signs in sees the difference before agreeing to it.
+    public static let projectScopes = ["issues:create", "write"]
 
     /// From the OAuth application someone registers in their own workspace. Public
     /// by design - a client id is not a credential.
     public let clientID: String
     public let redirectURI: String
+    public let scopes: [String]
 
-    public init(clientID: String, redirectURI: String) {
+    public init(clientID: String, redirectURI: String,
+                scopes: [String] = LinearOAuth.defaultScopes) {
         self.clientID = clientID
         self.redirectURI = redirectURI
+        self.scopes = scopes
     }
+
+    /// Whether a token from this application could create a project.
+    ///
+    /// The panel asks before offering the control, so somebody is not handed a
+    /// button that can only fail.
+    public var canCreateProjects: Bool { scopes.contains("write") }
 
     // MARK: - PKCE
 
@@ -60,7 +83,7 @@ public struct LinearOAuth: Sendable {
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: Self.scope),
+            URLQueryItem(name: "scope", value: scopes.joined(separator: ",")),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: proof.challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
