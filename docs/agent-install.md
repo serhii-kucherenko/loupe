@@ -99,6 +99,29 @@ The dynamic `import()` matters: it keeps Loupe out of the production bundle enti
 
 Electron is the same, in the renderer entry point. Use `platform: "electron"`.
 
+### 2b. If the app has a design system, hand Loupe its tokens
+
+Loupe's own look is a warm orange, on purpose: an overlay must read as a tool rather
+than as part of the page underneath. But a page with an accent of its own gets to say
+so, and then the overlay stops looking like a visitor:
+
+```ts
+start({
+  app,
+  endpoint: "/loupe/intake",
+  theme: { accent: "var(--brand)", panelRadius: 28, fontFamily: "var(--font-sans)" },
+});
+```
+
+**Point at the page's own variables rather than copying values.** A colour is any CSS
+string, so `var(--brand)` costs nothing and can never disagree with the page. One
+string means both light and dark; `{ light, dark }` says them separately.
+
+The overlay lives in a shadow root, so the page's stylesheet cannot reach in - that is
+deliberate, since a global `* { box-sizing }` reset would otherwise reshape the tool
+sitting on the page, and it is why this option exists. Every field has a default;
+omit it and nothing changes.
+
 ### 3. Give it somewhere to send to
 
 `endpoint` is a URL you own. **Point it at the repository you are working in**, so a bundle
@@ -228,6 +251,27 @@ Loupe.attach(to: window)
 - **UIKit:** in `scene(_:willConnectTo:options:)`, passing the scene's window.
 
 **Do not** put `Loupe.attach` somewhere that runs more than once.
+
+### 2b. If the host app has a design system, hand Loupe its tokens
+
+Loupe's own look is a warm orange, on purpose: an overlay must read as a tool rather
+than as part of the app underneath. But an app with tokens of its own gets to say so,
+and then the overlay stops looking like a visitor sitting in the middle of it:
+
+```swift
+Loupe.start(app: app, theme: LoupeTheme.Appearance(
+    accent: .init(light: .init(hex: 0x4338CA), dark: .init(hex: 0xA5B4FC)),
+    panelRadius: 28,
+    label: .headline))
+```
+
+**Look for the host's tokens before writing values by hand.** A `DESIGN.md`, a
+`tokens.json`, a `Color` extension - that is where the accent already lives, and a
+value copied out of one of them is a second copy that will disagree with the first.
+
+Every field has a default, so name only what the host actually has an opinion about.
+Omit the argument entirely and nothing changes. `DESIGN.md` in this repo lists every
+token and says which ones are fixed.
 
 ### 3. Where bundles land
 
