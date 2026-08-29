@@ -234,14 +234,21 @@ public final class OverlayHost {
     /// A press that barely moved is a click on an element; one that swept out a
     /// rectangle is a region. `capture(rect:in:)` decides which, by refusing
     /// anything under `minimumRegionSize`.
+    ///
+    /// Asynchronous because the capture is: asking WebKit for a web view's real
+    /// pixels is the only way to get them, and it answers on a callback. Everything
+    /// before the `await` still happens in the same turn, so the pointer position is
+    /// read before anything can move.
     private func finishDrag(from origin: (window: NSWindow, point: CGPoint)) {
         let end = target?.window === origin.window ? target?.point : nil
         let rect = Self.box(origin.point, end ?? origin.point)
 
-        if let shot = ElementPicker.capture(rect: rect, in: origin.window) {
-            deliver(shot, from: origin.window)
-        } else {
-            pick(at: end ?? origin.point, in: origin.window)
+        Task { @MainActor in
+            if let shot = await ElementPicker.capture(rect: rect, in: origin.window) {
+                deliver(shot, from: origin.window)
+            } else {
+                await pick(at: end ?? origin.point, in: origin.window)
+            }
         }
     }
 
@@ -267,8 +274,8 @@ public final class OverlayHost {
         model.hover(ElementPicker.hoverRef(at: target.point, in: target.window))
     }
 
-    private func pick(at point: CGPoint, in window: NSWindow) {
-        guard let shot = ElementPicker.capture(at: point, in: window) else { return }
+    private func pick(at point: CGPoint, in window: NSWindow) async {
+        guard let shot = await ElementPicker.capture(at: point, in: window) else { return }
         deliver(shot, from: window)
     }
 
@@ -449,7 +456,12 @@ public final class OverlayHost {
                   let target = WindowFinder.topmost(in: scene, excluding: overlayWindow, at: point)
             else { return }
             model.resolveDraftAndResumePicking()
-            deliver(ElementPicker.capture(at: point, in: target), to: model, from: target)
+            // The window is resolved before the await, so a scene change mid-capture
+            // cannot make this photograph something else.
+            Task { @MainActor in
+                deliver(await ElementPicker.capture(at: point, in: target),
+                        to: model, from: target)
+            }
         }, onDrag: { [weak model, weak scene] rect in
             guard let model, let scene,
                   // The centre, not a corner: a rectangle drawn over a dialog should
@@ -458,7 +470,10 @@ public final class OverlayHost {
                                                     at: CGPoint(x: rect.midX, y: rect.midY))
             else { return }
             model.resolveDraftAndResumePicking()
-            deliver(ElementPicker.capture(rect: rect, in: target), to: model, from: target)
+            Task { @MainActor in
+                deliver(await ElementPicker.capture(rect: rect, in: target),
+                        to: model, from: target)
+            }
         }, window: window)
 
         let controller = UIHostingController(rootView: content.ignoresSafeArea())

@@ -25,9 +25,9 @@ final class ContextShotTests: XCTestCase {
         return (window, card)
     }
 
-    func testTheContextShotIsTheWholeWindowNotTheElement() {
+    func testTheContextShotIsTheWholeWindowNotTheElement() async {
         let (window, card) = window()
-        guard let data = ElementPicker.contextPNG(of: card, in: window),
+        guard let data = await ElementPicker.contextPNG(of: card, in: window),
               let image = NSImage(data: data) else {
             return XCTFail("no context shot")
         }
@@ -37,9 +37,9 @@ final class ContextShotTests: XCTestCase {
         XCTAssertNotEqual(image.size, CGSize(width: 120, height: 40))
     }
 
-    func testTheTightCropIsStillJustTheElement() {
+    func testTheTightCropIsStillJustTheElement() async {
         let (_, card) = window()
-        guard let data = ElementPicker.screenshotPNG(of: card),
+        guard let data = await ElementPicker.screenshotPNG(of: card),
               let image = NSImage(data: data) else {
             return XCTFail("no crop")
         }
@@ -49,9 +49,9 @@ final class ContextShotTests: XCTestCase {
 
     /// The point of the shot is that you can see *which* element it is about, so the
     /// outline has to actually be drawn, not merely intended.
-    func testTheElementIsOutlinedInTheContextShot() throws {
+    func testTheElementIsOutlinedInTheContextShot() async throws {
         let (window, card) = window()
-        guard let data = ElementPicker.contextPNG(of: card, in: window),
+        guard let data = await ElementPicker.contextPNG(of: card, in: window),
               let source = NSBitmapImageRep(data: data) else {
             return XCTFail("no context shot")
         }
@@ -76,11 +76,12 @@ final class ContextShotTests: XCTestCase {
         XCTAssertTrue(found, "the picked element is not outlined, so the shot says nothing")
     }
 
-    func testAZeroSizedWindowIsNotAnError() {
+    func testAZeroSizedWindowIsNotAnError() async {
         let empty = NSWindow(contentRect: .zero, styleMask: [.titled],
                              backing: .buffered, defer: false)
         empty.contentView = NSView(frame: .zero)
-        XCTAssertNil(ElementPicker.contextPNG(of: empty.contentView!, in: empty))
+        let png = await ElementPicker.contextPNG(of: empty.contentView!, in: empty)
+        XCTAssertNil(png)
     }
 }
 #endif

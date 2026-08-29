@@ -104,7 +104,7 @@ final class ElementPickerUIKitTests: XCTestCase {
         XCTAssertEqual(bounds.width, 100, accuracy: 0.5)
     }
 
-    func testTheCropIsTheElementAndTheContextShotIsTheScreen() {
+    func testTheCropIsTheElementAndTheContextShotIsTheScreen() async {
         var card: UIView!
         let window = makeWindow { root in
             card = UIView(frame: CGRect(x: 20, y: 100, width: 300, height: 80))
@@ -119,12 +119,12 @@ final class ElementPickerUIKitTests: XCTestCase {
         // reports points, which is why the macOS test compares different numbers.
         let scale = window.screen.scale
 
-        guard let crop = ElementPicker.screenshotPNG(of: card),
+        guard let crop = await ElementPicker.screenshotPNG(of: card),
               let cropped = UIImage(data: crop) else { return XCTFail("no crop") }
         XCTAssertEqual(cropped.size.width, 300 * scale, accuracy: scale)
         XCTAssertEqual(cropped.size.height, 80 * scale, accuracy: scale)
 
-        guard let context = ElementPicker.contextPNG(of: card, in: window),
+        guard let context = await ElementPicker.contextPNG(of: card, in: window),
               let whole = UIImage(data: context) else { return XCTFail("no context shot") }
         XCTAssertEqual(whole.size.width, 400 * scale, accuracy: scale, "the screen, not the card")
         XCTAssertEqual(whole.size.height, 600 * scale, accuracy: scale)
@@ -151,10 +151,10 @@ final class ElementRegionUIKitTests: XCTestCase {
         return window
     }
 
-    func testAPointOverNothingStillCaptures() {
+    func testAPointOverNothingStillCaptures() async {
         let window = makeWindow()
 
-        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
+        let shot = await ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
 
         XCTAssertNotNil(shot)
         XCTAssertNil(shot?.ref.className, "a region has no element to name")
@@ -173,13 +173,13 @@ final class ElementRegionUIKitTests: XCTestCase {
         XCTAssertEqual(ref?.bounds.y, 300 - half)
     }
 
-    func testARealElementIsStillPreferredOverARegion() {
+    func testARealElementIsStillPreferredOverARegion() async {
         let window = makeWindow()
         let card = UIView(frame: CGRect(x: 150, y: 250, width: 100, height: 100))
         card.accessibilityIdentifier = "product.card"
         window.rootViewController?.view.addSubview(card)
 
-        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
+        let shot = await ElementPicker.capture(at: CGPoint(x: 200, y: 300), in: window)
 
         XCTAssertEqual(shot?.ref.accessibilityID, "product.card")
         XCTAssertEqual(shot?.ref.bounds.width, 100)
@@ -216,12 +216,12 @@ final class OversizedElementUIKitTests: XCTestCase {
     }
 
     /// And the tool still answers, because answering is the point.
-    func testTheShelfStillCapturesAsARegion() {
+    func testTheShelfStillCapturesAsARegion() async {
         let window = iPad { root in
             root.addSubview(UIView(frame: CGRect(x: 0, y: 32, width: 1032, height: 621)))
         }
 
-        let shot = ElementPicker.capture(at: CGPoint(x: 300, y: 200), in: window)
+        let shot = await ElementPicker.capture(at: CGPoint(x: 300, y: 200), in: window)
 
         XCTAssertNotNil(shot)
         XCTAssertNil(shot?.ref.className)

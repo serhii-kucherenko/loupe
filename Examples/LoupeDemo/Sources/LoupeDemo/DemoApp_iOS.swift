@@ -59,8 +59,11 @@ enum DemoScene {
             return
         }
 
+        // A `Task` rather than `assumeIsolated`: capturing a screen is asynchronous
+        // now, because asking WebKit for a web view's real pixels is the only way to
+        // get them and it answers on a callback.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 if scene == "key" {
                     func report(_ label: String) {
                         let key = window.windowScene?.windows.first { $0.isKeyWindow }
@@ -76,7 +79,7 @@ enum DemoScene {
                     // bug for a worse one.
                     let point = CGPoint(x: window.bounds.width * 0.26,
                                         y: window.bounds.height * 0.27)
-                    pick(at: point, in: window, model: model)
+                    await pick(at: point, in: window, model: model)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         MainActor.assumeIsolated {
                             report("commenting")
@@ -111,7 +114,7 @@ enum DemoScene {
                     if scene == "drag" {
                         let rect = CGRect(x: from.x, y: from.y,
                                           width: to.x - from.x, height: to.y - from.y)
-                        if let shot = ElementPicker.capture(rect: rect, in: window) {
+                        if let shot = await ElementPicker.capture(rect: rect, in: window) {
                             print("LOUPE-SCENE drag: kind=\(shot.ref.kind.rawValue) "
                                   + "bounds=\(shot.ref.bounds) crop=\(shot.screenshotPNG?.count ?? 0)B")
                             model.pick(shot.ref,
@@ -131,10 +134,10 @@ enum DemoScene {
                 if scene == "repick" {
                     let first = CGPoint(x: size.width * 0.26, y: size.height * 0.27)
                     let second = CGPoint(x: size.width * 0.26, y: size.height * 0.40)
-                    pick(at: first, in: window, model: model)
+                    await pick(at: first, in: window, model: model)
                     print("LOUPE-REPICK after first: \(model.mode)")
                     model.resolveDraftAndResumePicking()
-                    pick(at: second, in: window, model: model)
+                    await pick(at: second, in: window, model: model)
                     if case .commenting(let p) = model.mode {
                         print("LOUPE-REPICK second landed: bounds=\(p.ref.bounds)")
                     } else {
@@ -151,14 +154,14 @@ enum DemoScene {
                     print("LOUPE-OCCLUSION regions=\(regions)")
                     let blocked = regions.contains { $0.contains(underTheOldBar) }
                     print("LOUPE-OCCLUSION point \(underTheOldBar) blocked=\(blocked)")
-                    report(at: underTheOldBar, in: window, label: "under the old bar")
+                    await report(at: underTheOldBar, in: window, label: "under the old bar")
                 }
 
                 // SER-697: pick low on the screen, where the keyboard lands on top
                 // of Save unless the popover knows the keyboard is there.
                 if scene == "lowpick" {
                     let low = CGPoint(x: size.width * 0.26, y: size.height * 0.66)
-                    pick(at: low, in: window, model: model)
+                    await pick(at: low, in: window, model: model)
                     print("LOUPE-LOW picked at \(low) of \(size)")
                 }
 
@@ -181,14 +184,14 @@ enum DemoScene {
                 }
 
                 if scene == "hover" || scene == "pick" || scene == "tray" {
-                    report(at: row, in: window, label: "row")
-                    pick(at: row, in: window, model: model)
+                    await report(at: row, in: window, label: "row")
+                    await pick(at: row, in: window, model: model)
                 }
                 if scene == "tray" {
                     model.saveComment("stock count is unreadable at that size", tag: .polish)
                     model.resumePicking()
-                    report(at: basket, in: window, label: "basket")
-                    pick(at: basket, in: window, model: model)
+                    await report(at: basket, in: window, label: "basket")
+                    await pick(at: basket, in: window, model: model)
                     model.saveComment("the empty basket gives you nowhere to go", tag: .bug)
                     // Asked for, because the tray no longer opens itself. That is
                     // the whole of SER-693: saving a note used to change the layout
@@ -221,7 +224,7 @@ enum DemoScene {
             model.beginAnnotating()
             let size = window.bounds.size
             for (index, fraction) in [0.27, 0.35, 0.43].enumerated() {
-                pick(at: CGPoint(x: size.width * 0.26, y: size.height * fraction),
+                await pick(at: CGPoint(x: size.width * 0.26, y: size.height * fraction),
                      in: window, model: model)
                 model.saveComment("offline note \(index + 1)", tag: .bug)
                 model.resumePicking()
@@ -250,8 +253,8 @@ enum DemoScene {
         }
     }
 
-    private static func report(at point: CGPoint, in window: UIWindow, label: String) {
-        guard let shot = ElementPicker.capture(at: point, in: window) else {
+    private static func report(at point: CGPoint, in window: UIWindow, label: String) async {
+        guard let shot = await ElementPicker.capture(at: point, in: window) else {
             print("LOUPE-SCENE \(label): nothing at \(point)")
             return
         }
@@ -261,8 +264,8 @@ enum DemoScene {
               + "crop=\(shot.screenshotPNG?.count ?? 0)B")
     }
 
-    private static func pick(at point: CGPoint, in window: UIWindow, model: OverlayModel) {
-        guard let shot = ElementPicker.capture(at: point, in: window) else { return }
+    private static func pick(at point: CGPoint, in window: UIWindow, model: OverlayModel) async {
+        guard let shot = await ElementPicker.capture(at: point, in: window) else { return }
         model.pick(shot.ref,
                    screenshotPNG: shot.screenshotPNG,
                    contextScreenshotPNG: shot.contextScreenshotPNG,

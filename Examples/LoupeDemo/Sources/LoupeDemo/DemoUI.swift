@@ -119,6 +119,11 @@ struct RootView: View {
     enum Role: String, CaseIterable, Identifiable {
         case annotator = "Annotator"
         case agent = "Agent inbox"
+        #if canImport(UIKit)
+        /// Content this process cannot draw. The demo had none, which is why a
+        /// capture that returns the previous screen got as far as somebody's iPad.
+        case reader = "Reader"
+        #endif
         var id: String { rawValue }
     }
 
@@ -144,6 +149,9 @@ struct RootView: View {
             switch role {
             case .annotator: AnnotatorScreen(server: server)
             case .agent: AgentInbox()
+            #if canImport(UIKit)
+            case .reader: ReaderScreen()
+            #endif
             }
         }
     }

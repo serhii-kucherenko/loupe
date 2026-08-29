@@ -95,10 +95,10 @@ final class ElementPickerTests: XCTestCase {
     // Pointing at content the framework cannot resolve must still capture something.
     // On iOS this is the common case, not the edge one: SwiftUI draws headings and
     // stacks into a shared layer with no view behind them.
-    func testAnUnresolvablePointStillCapturesTheRegionAroundIt() {
+    func testAnUnresolvablePointStillCapturesTheRegionAroundIt() async {
         let window = window { _ in }
 
-        let shot = ElementPicker.capture(at: CGPoint(x: 200, y: 150), in: window)
+        let shot = await ElementPicker.capture(at: CGPoint(x: 200, y: 150), in: window)
 
         XCTAssertNotNil(shot, "a point inside the window always captures something")
         XCTAssertNil(shot?.ref.className, "a region has no element to name")
@@ -242,8 +242,8 @@ final class DragRegionTests: XCTestCase {
         return window
     }
 
-    func testADraggedRectangleIsCapturedAsItWasDrawn() {
-        let shot = ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
+    func testADraggedRectangleIsCapturedAsItWasDrawn() async {
+        let shot = await ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
                                          in: window())
 
         XCTAssertEqual(shot?.ref.kind, .region)
@@ -256,25 +256,27 @@ final class DragRegionTests: XCTestCase {
     }
 
     /// Dragging up and to the left is the same rectangle as dragging down and right.
-    func testDraggingBackwardsIsTheSameRectangle() {
-        let forward = ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
+    func testDraggingBackwardsIsTheSameRectangle() async {
+        let forward = await ElementPicker.capture(rect: CGRect(x: 50, y: 60, width: 120, height: 80),
                                             in: window())
-        let backward = ElementPicker.capture(rect: CGRect(x: 170, y: 140, width: -120, height: -80),
+        let backward = await ElementPicker.capture(rect: CGRect(x: 170, y: 140, width: -120, height: -80),
                                              in: window())
 
         XCTAssertEqual(forward?.ref.bounds, backward?.ref.bounds)
     }
 
     /// Otherwise a click that slipped two points would become a rectangle nobody meant.
-    func testATinyDragIsNotARegion() {
+    func testATinyDragIsNotARegion() async {
         let tiny = CGRect(x: 50, y: 60,
                           width: ElementPicker.minimumRegionSize - 1,
                           height: ElementPicker.minimumRegionSize - 1)
-        XCTAssertNil(ElementPicker.capture(rect: tiny, in: window()))
+        // Bound first: XCTAssert* take autoclosures, which cannot carry an await.
+        let shot = await ElementPicker.capture(rect: tiny, in: window())
+        XCTAssertNil(shot)
     }
 
-    func testARectangleDraggedOffTheEdgeIsClippedToTheWindow() {
-        let shot = ElementPicker.capture(rect: CGRect(x: -40, y: -30, width: 200, height: 150),
+    func testARectangleDraggedOffTheEdgeIsClippedToTheWindow() async {
+        let shot = await ElementPicker.capture(rect: CGRect(x: -40, y: -30, width: 200, height: 150),
                                          in: window())
 
         XCTAssertEqual(shot?.ref.bounds.x, 0)
