@@ -17,6 +17,7 @@ struct LoupeDemoApp: App {
     var body: some Scene {
         WindowGroup("Northgate Supply — staging") {
             RootView(server: delegate.server)
+                .tint(DemoLaunch.hostTint)
                 .frame(minWidth: 900, minHeight: 640)
                 .background(WindowAccessor { window in
                     // Attaching needs a window, and there is none at launch.

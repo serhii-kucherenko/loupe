@@ -14,6 +14,50 @@ Translucent, but **blurred**. A panel that is merely see-through lets the host a
 text read straight through a comment, which is unusable over a busy screen. `blur.panel`
 goes behind every surface, so what shows through is depth rather than someone else's words.
 
+## A host may replace these
+
+Everything below is Loupe's own look, and it is the default. A host app that has a
+design system of its own passes tokens to `Loupe.start(app:theme:)` and the overlay
+wears them instead:
+
+```swift
+Loupe.start(app: app, theme: LoupeTheme.Appearance(
+    accent: .init(light: .init(hex: 0x4338CA), dark: .init(hex: 0xA5B4FC)),
+    panelRadius: 28))
+```
+
+| Replaceable | Fixed |
+|---|---|
+| every colour in the table below | spacing, strokes, elevation, motion, hit targets |
+| `radius.panel`, `radius.control`, `radius.highlight` | everything else in Spacing and shape |
+| `type.body`, `type.label`, `type.caption`, `type.note` | |
+
+Three rules hold this together:
+
+1. **Every field has a default**, so a host names only what it has an opinion about,
+   and omitting the argument entirely is exactly the picture in this file.
+2. **`loupe.highlight.fill` follows the accent** unless the host states its own. A
+   host names one accent; getting the wash right at two alphas in two appearances is
+   the sort of homework that makes a theming hook go unused.
+3. **It is not a styling API.** No per-control overrides, no slots for custom views.
+   An overlay that can be restyled arbitrarily becomes a UI framework, and the point
+   is for this one to disappear into its host.
+
+The web SDK takes the same tokens by the same names, as CSS strings rather than
+hex pairs - `start({ app, theme: { accent: "var(--brand)" } })` - so a page points
+Loupe at a variable it already has instead of restating the value. The overlay is in
+a shadow root there, so this option is the only way in; that is by design, since a
+page's own reset would otherwise reshape the tool sitting on it.
+
+The spacing scale, strokes, elevation and motion are deliberately not replaceable.
+They are what make the overlay feel like one thing across four platforms, and a host
+that changes them is not theming Loupe, it is redrawing it.
+
+`scripts/check-theme-literals.py` fails the build on a colour, font or radius written
+anywhere but `LoupeTheme.swift`. That is what makes the promise true rather than
+mostly true: one hardcoded value is one control that ignores the host, which reads as
+a bug rather than as a theme.
+
 ## Colour
 
 Semantic names, not literal ones. Light and dark are both first-class.

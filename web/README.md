@@ -42,6 +42,37 @@ Loupe is there.
 | `captureConsole` | `false` | Capture `console.*` as well as unhandled errors. See below. |
 | `captureScreenshots` | `true` | Draw the picked element into the bundle. |
 | `screen` | `location.pathname` | What to call the current screen. |
+| `theme` | Loupe's own look | Your design tokens. See below. |
+
+### It can wear your design system
+
+Loupe's own look is a warm orange, on purpose: an overlay has to read as a tool, not
+as part of the page underneath it. But a page with an accent of its own gets to say
+so, and then the overlay stops looking like a visitor:
+
+```ts
+start({
+  app,
+  theme: {
+    accent: "var(--brand)",
+    panelRadius: 28,
+    fontFamily: "Inter, system-ui, sans-serif",
+  },
+});
+```
+
+Colours are any CSS colour - a hex, `oklch(...)`, or `var(--brand)` to point straight
+at a variable your page already has, so the value is never written down twice. One
+string means both schemes; `{ light, dark }` says them separately. The wash inside a
+picked element follows your accent without being asked.
+
+**The overlay lives in a shadow root, so your stylesheet cannot reach in.** That is
+deliberate - a global `* { box-sizing }` reset would otherwise reshape the tool
+sitting on your page - and it is why this option exists at all.
+
+**It is not a styling API.** Colours, three radii and a font stack. Sizes stay
+Loupe's, because they are hit targets as much as type. `DESIGN.md` lists every token,
+and the Swift SDK takes the same tokens by the same names.
 
 ## What it captures
 

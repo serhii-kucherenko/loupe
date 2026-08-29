@@ -7,6 +7,13 @@ import LoupeCore
 /// This is the Swift half of that check.
 final class TokenManifestTests: XCTestCase {
 
+    // The theme is global, so a test elsewhere that set a host theme and did not
+    // put it back would make this file pass or fail for a reason that is not in it.
+    override func setUp() {
+        super.setUp()
+        LoupeTheme.appearance = .stock
+    }
+
     private struct Manifest: Decodable {
         struct Colour: Decodable {
             let light: String, dark: String

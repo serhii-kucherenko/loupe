@@ -3,6 +3,7 @@ import { AnnotationSession } from "./session.js";
 import { HTTPTransport, QueuedTransport, type Transport } from "./transport.js";
 import { LogRecorder, NetworkRecorder } from "./recorder.js";
 import { Overlay, type OverlayOptions } from "./overlay.js";
+import type { Theme } from "./tokens.js";
 
 export * from "./types.js";
 export { AnnotationSession } from "./session.js";
@@ -12,6 +13,7 @@ export { Overlay, swallowsInput, type OverlayMode } from "./overlay.js";
 export { screenshotPNG } from "./capture.js";
 export { pick, elementRef, meaningfulAncestor, cssSelector } from "./picker.js";
 export { tokens, cssVariables } from "./tokens.js";
+export type { Theme, ThemeColour } from "./tokens.js";
 
 export interface StartOptions {
   app: AppInfo;
@@ -24,6 +26,15 @@ export interface StartOptions {
   captureScreenshots?: boolean;
   screen?: () => string;
   window?: Window & typeof globalThis;
+  /**
+   * Your own design tokens, so the overlay stops looking like a visitor:
+   *
+   *     start({ app, theme: { accent: "var(--brand)", panelRadius: 28 } })
+   *
+   * The overlay lives in a shadow root, so your page's stylesheet cannot reach in -
+   * this is the way through. Every field is optional; omit it and nothing changes.
+   */
+  theme?: Theme;
 }
 
 /**
@@ -58,6 +69,7 @@ export function start(options: StartOptions): Loupe {
     network, logs,
     captureScreenshots: options.captureScreenshots ?? true,
   };
+  if (options.theme) overlayOptions.theme = options.theme;
   if (queue) overlayOptions.queue = queue;
   if (options.screen) overlayOptions.screen = options.screen;
 
