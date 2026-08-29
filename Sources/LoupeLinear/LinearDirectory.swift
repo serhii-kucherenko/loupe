@@ -98,7 +98,11 @@ public struct LinearDirectory: Sendable {
             case 401: throw LinearError.credentialRejected
             case 403: throw LinearError.notPermitted("this workspace")
             case 429: throw LinearError.rateLimited(retryAfter: nil)
-            default: throw LinearError.api("Linear returned \(http.statusCode)")
+            // The body, not just the number. This is the panel's own path: a
+            // Test connection that fails is read by somebody deciding what to
+            // change, and "Linear returned 400" tells them nothing to change.
+            default: throw LinearError.fromHTTP(status: http.statusCode,
+                                                body: data, request: request)
             }
         }
 
@@ -106,7 +110,8 @@ public struct LinearDirectory: Sendable {
             throw LinearError.api("Linear returned something that is not JSON")
         }
         if let errors = json["errors"] as? [[String: Any]], !errors.isEmpty {
-            throw LinearError.api(errors.first?["message"] as? String ?? "unknown error")
+            throw LinearError.fromGraphQL(
+                errors.first?["message"] as? String ?? "unknown error")
         }
         return json["data"] as? [String: Any] ?? [:]
     }

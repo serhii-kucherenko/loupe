@@ -100,6 +100,18 @@ public final class LinearTransport: Transport, @unchecked Sendable {
         request.setValue("public, max-age=31536000", forHTTPHeaderField: "Cache-Control")
         // Every header the mutation handed back has to be echoed or the signed URL
         // rejects the body. This is the step people miss.
+        //
+        // Checked against Linear's own example on 2026-08-29 (developers/
+        // how-to-upload-a-file-to-linear): same two headers set first, by the same
+        // names and the same `public, max-age=31536000`, then the returned headers
+        // set over the top. Written down so the next person chasing an upload
+        // failure does not spend the afternoon re-deriving that this part is right.
+        //
+        // The one thing that page says which is not obviously true of Loupe: "the
+        // PUT request must be executed on the server". That is about a browser,
+        // where the request carries an `Origin` and the bucket refuses it. A native
+        // app sends no `Origin`, so this is the server case as far as storage is
+        // concerned.
         for header in payload["headers"] as? [[String: Any]] ?? [] {
             if let key = header["key"] as? String, let value = header["value"] as? String {
                 request.setValue(value, forHTTPHeaderField: key)
@@ -149,7 +161,10 @@ public final class LinearTransport: Transport, @unchecked Sendable {
         // nothing about whether the thing was done.
         if let errors = json["errors"] as? [[String: Any]], !errors.isEmpty {
             let first = errors.first?["message"] as? String ?? "unknown error"
-            throw LinearError.api(first)
+            // Read for whether it is about access. "Access denied" is true and
+            // useless: it does not say the credential is too narrow, and it does
+            // not say that signing in again would fix it.
+            throw LinearError.fromGraphQL(first)
         }
         return json["data"] as? [String: Any] ?? [:]
     }
@@ -175,35 +190,9 @@ public final class LinearTransport: Transport, @unchecked Sendable {
             let after = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
             throw LinearError.rateLimited(retryAfter: after)
         default:
-            throw LinearError.api(Self.failure(status: http.statusCode,
-                                               body: data,
-                                               request: request))
+            throw LinearError.fromHTTP(status: http.statusCode,
+                                       body: data,
+                                       request: request)
         }
-    }
-
-    /// What actually came back, not just the number.
-    ///
-    /// This threw away the body, and the body is the answer: Linear names the field
-    /// or the argument it did not like, and a signed upload URL says which header
-    /// broke the signature. "Linear returned 400" was true and useless - the ninth
-    /// failure on this project to know exactly what went wrong and say nothing.
-    ///
-    /// The host is named because `perform` is shared. An upload goes to a signed
-    /// storage URL rather than to Linear, so "Linear returned 400" was misdirecting
-    /// as well as empty, and the two have completely different causes.
-    static func failure(status: Int, body: Data, request: URLRequest) -> String {
-        let who = request.url?.host.map { $0.contains("linear.app") ? "Linear" : $0 }
-            ?? "The server"
-        let text = String(decoding: body, as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return "\(who) returned \(status) and said nothing." }
-
-        // Bounded: some servers answer an error with a page. Enough to name a field
-        // or a header, short enough to read on a phone.
-        let limit = 400
-        let shown = text.count > limit
-            ? String(text.prefix(limit)) + "\u{2026}"
-            : text
-        return "\(who) returned \(status): \(shown)"
     }
 }

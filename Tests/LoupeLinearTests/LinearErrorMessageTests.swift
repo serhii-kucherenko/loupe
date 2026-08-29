@@ -20,6 +20,7 @@ final class LinearErrorMessageTests: XCTestCase {
         .noDestination,
         .credentialRejected,
         .notPermitted("Core Team"),
+        .credentialTooNarrow("Access denied"),
         .rateLimited(retryAfter: 5),
         .unreachable("the network is offline"),
         .api("Access denied"),
@@ -66,5 +67,58 @@ final class LinearErrorMessageTests: XCTestCase {
             .localizedDescription.contains("Core Team"))
         XCTAssertTrue(LinearError.unreachable("offline")
             .localizedDescription.contains("offline"))
+    }
+
+    // MARK: - A refusal has to say what to do about it
+
+    /// GraphQL returns an access refusal in the `errors` array with HTTP 200, so
+    /// the status code cannot tell a refusal from a typo in a field name. The words
+    /// are the only signal there is.
+    func testARefusalIsRecognisedAndSaysWhatWouldFixIt() {
+        let refusals = [
+            "Access denied",
+            "You are not authorized to perform this action",
+            "Missing required scope: issues:create",
+            "Insufficient permission for this operation",
+            "Forbidden",
+        ]
+        for said in refusals {
+            let error = LinearError.fromGraphQL(said)
+            XCTAssertEqual(error, .credentialTooNarrow(said), said)
+
+            let message = error.localizedDescription
+            XCTAssertTrue(message.contains(said),
+                          "Linear's own words are the part that is not a guess")
+            XCTAssertTrue(message.contains("sign in again"),
+                          "and the advice is the part that was missing: \(message)")
+        }
+    }
+
+    /// The load-bearing half. Sending somebody to re-authenticate over a missing
+    /// team or a typo is worse than a vague message: it is confidently wrong, and it
+    /// costs an evening spent on the wrong fix.
+    func testAFailureThatIsNotAboutAccessIsNeverRelabelledAsOne() {
+        let others = [
+            "Team not found",
+            "Argument Validation Error",
+            "Variable $size of type Int! was provided invalid value",
+            "Entity not found: Project",
+            "Internal server error",
+        ]
+        for said in others {
+            XCTAssertEqual(LinearError.fromGraphQL(said), .api(said),
+                           "\(said) has nothing to do with access")
+            XCTAssertFalse(LinearError.fromGraphQL(said).localizedDescription
+                .contains("sign in again"), said)
+        }
+    }
+
+    /// A rejected credential and a credential that is merely too narrow want
+    /// opposite actions: replace the key, or widen it. They must not read alike.
+    func testTooNarrowIsNotTheSameAdviceAsRejected() {
+        XCTAssertNotEqual(LinearError.credentialTooNarrow("Access denied").description,
+                          LinearError.credentialRejected.description)
+        XCTAssertFalse(LinearError.credentialTooNarrow("Access denied").isWorthRetrying,
+                       "a narrow credential will be just as narrow next time")
     }
 }

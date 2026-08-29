@@ -223,10 +223,10 @@ final class LinearTransportTests: XCTestCase {
     /// thing - a broken signature and a bad mutation have nothing in common.
     func testAFailureFromTheUploadHostIsNotBlamedOnLinear() {
         let request = URLRequest(url: URL(string: "https://uploads.example.com/signed")!)
-        let message = LinearTransport.failure(
+        let message = LinearError.fromHTTP(
             status: 403,
             body: Data("<Error><Code>SignatureDoesNotMatch</Code></Error>".utf8),
-            request: request)
+            request: request).description
 
         XCTAssertTrue(message.contains("uploads.example.com"), message)
         XCTAssertFalse(message.contains("Linear"), message)
@@ -235,9 +235,9 @@ final class LinearTransportTests: XCTestCase {
 
     func testAFailureFromLinearIsNamedAsLinear() {
         let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
-        let message = LinearTransport.failure(status: 400,
+        let message = LinearError.fromHTTP(status: 400,
                                               body: Data("no such team".utf8),
-                                              request: request)
+                                              request: request).description
         XCTAssertEqual(message, "Linear returned 400: no such team")
     }
 
@@ -245,9 +245,9 @@ final class LinearTransportTests: XCTestCase {
     /// phone, inside a row in the tray.
     func testAVeryLongAnswerIsCutRatherThanDumped() {
         let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
-        let message = LinearTransport.failure(status: 500,
+        let message = LinearError.fromHTTP(status: 500,
                                               body: Data(String(repeating: "x", count: 5000).utf8),
-                                              request: request)
+                                              request: request).description
         XCTAssertLessThan(message.count, 500)
         XCTAssertTrue(message.hasSuffix("\u{2026}"), "and it must say it was cut")
     }
@@ -256,7 +256,7 @@ final class LinearTransportTests: XCTestCase {
     /// than trail off after a colon.
     func testAnEmptyAnswerStillReadsLikeASentence() {
         let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
-        let message = LinearTransport.failure(status: 502, body: Data(), request: request)
+        let message = LinearError.fromHTTP(status: 502, body: Data(), request: request).description
         XCTAssertEqual(message, "Linear returned 502 and said nothing.")
     }
 }

@@ -28,6 +28,14 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
     case noDestination
     case credentialRejected
     case notPermitted(String)
+    /// The credential works, and is not allowed to do this.
+    ///
+    /// Separate from `.credentialRejected`, which is a 401 and means the key itself
+    /// is wrong. This one authenticated fine and was refused the *action*, so the
+    /// fix is a wider credential rather than a different one - and "Access denied"
+    /// on its own never says that. Carries Linear's own words as well, because the
+    /// advice is a guess and the words are not.
+    case credentialTooNarrow(String)
     case rateLimited(retryAfter: TimeInterval?)
     case unreachable(String)
     case api(String)
@@ -49,6 +57,10 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
             return "Linear rejected the credential. Check the key, or sign in again."
         case .notPermitted(let what):
             return "No permission for \(what)."
+        case .credentialTooNarrow(let said):
+            return "Linear refused this: \(said). The credential is probably too "
+                + "narrow - sign in again to grant issue creation, or paste a "
+                + "personal API key."
         case .rateLimited(let after):
             let when = after.map { " Retrying in \(Int($0))s." } ?? " It will retry."
             return "Linear is rate limiting this workspace." + when
@@ -73,13 +85,62 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
 
     public var errorDescription: String? { description }
 
+    /// What actually came back, not just the number.
+    ///
+    /// This threw away the body, and the body is the answer: Linear names the field
+    /// or the argument it did not like, and a signed upload URL says which header
+    /// broke the signature. "Linear returned 400" was true and useless - the ninth
+    /// failure on this project to know exactly what went wrong and say nothing.
+    ///
+    /// The host is named because `perform` is shared. An upload goes to a signed
+    /// storage URL rather than to Linear, so "Linear returned 400" was misdirecting
+    /// as well as empty, and the two have completely different causes.
+    static func fromHTTP(status: Int, body: Data, request: URLRequest) -> LinearError {
+        let who = request.url?.host.map { $0.contains("linear.app") ? "Linear" : $0 }
+            ?? "The server"
+        let text = String(decoding: body, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return .api("\(who) returned \(status) and said nothing.") }
+
+        // Bounded: some servers answer an error with a page. Enough to name a field
+        // or a header, short enough to read on a phone.
+        let limit = 400
+        let shown = text.count > limit
+            ? String(text.prefix(limit)) + "\u{2026}"
+            : text
+        return .api("\(who) returned \(status): \(shown)")
+    }
+
+    /// A GraphQL failure, read for whether it is about access.
+    ///
+    /// Linear returns an access refusal in the `errors` array with HTTP 200, so the
+    /// status code cannot tell a refusal from a typo in a field name. The words are
+    /// the only signal there is.
+    ///
+    /// **The `default` is the load-bearing half.** Anything that is not plainly
+    /// about access stays exactly what it was. Sending somebody to re-authenticate
+    /// over a missing team or a dropped connection is worse than a vague message,
+    /// because it is confidently wrong and costs them an evening on the wrong fix.
+    static func fromGraphQL(_ message: String) -> LinearError {
+        let said = message.lowercased()
+        let aboutAccess = ["access denied", "not authorized", "unauthorized",
+                           "forbidden", "permission", "scope"]
+        // Substrings, not whole words: Linear phrases these several ways and the
+        // list is a heuristic either way. Being wrong here costs a sentence of
+        // advice; being silent costs the evening.
+        if aboutAccess.contains(where: said.contains) {
+            return .credentialTooNarrow(message)
+        }
+        return .api(message)
+    }
+
     /// Whether leaving it in the queue could plausibly help. A rejected key will be
     /// rejected again; a flat network will not be flat forever.
     public var isWorthRetrying: Bool {
         switch self {
         case .rateLimited, .unreachable: return true
         case .notConfigured, .noDestination, .credentialRejected, .notPermitted,
-             .api, .couldNotStore:
+             .credentialTooNarrow, .api, .couldNotStore:
             return false
         }
     }
