@@ -188,4 +188,75 @@ final class LinearTransportTests: XCTestCase {
             XCTAssertEqual(error as? LinearError, .api("Team not found"))
         }
     }
+
+    // MARK: - The body is the answer
+
+    /// "Linear returned 400" is true and useless. Linear says which field or which
+    /// argument it did not like, and that sentence was being thrown away - so the
+    /// only information about a real failure never left the transport.
+    func testARejectedRequestCarriesWhatTheServerActuallySaid() async {
+        let said = """
+        {"errors":[{"message":"Argument Validation Error","extensions":{"field":"size"}}]}
+        """
+        let transport = LinearTransport(
+            credential: .apiKey("k"),
+            destination: LinearDestination(teamID: "TEAM"),
+            fetch: { request in
+                (Data(said.utf8),
+                 HTTPURLResponse(url: request.url!, statusCode: 400,
+                                 httpVersion: nil, headerFields: nil)!)
+            })
+
+        do {
+            try await transport.send(bundle(["a note"]))
+            XCTFail("expected the send to throw")
+        } catch {
+            let message = (error as? LinearError)?.localizedDescription ?? "\(error)"
+            XCTAssertTrue(message.contains("Argument Validation Error"),
+                          "the server's own words are the whole point: \(message)")
+            XCTAssertTrue(message.contains("400"), message)
+        }
+    }
+
+    /// `perform` is shared with the image PUT, which goes to a signed storage URL and
+    /// not to Linear at all. Blaming Linear for it sends somebody to check the wrong
+    /// thing - a broken signature and a bad mutation have nothing in common.
+    func testAFailureFromTheUploadHostIsNotBlamedOnLinear() {
+        let request = URLRequest(url: URL(string: "https://uploads.example.com/signed")!)
+        let message = LinearTransport.failure(
+            status: 403,
+            body: Data("<Error><Code>SignatureDoesNotMatch</Code></Error>".utf8),
+            request: request)
+
+        XCTAssertTrue(message.contains("uploads.example.com"), message)
+        XCTAssertFalse(message.contains("Linear"), message)
+        XCTAssertTrue(message.contains("SignatureDoesNotMatch"), message)
+    }
+
+    func testAFailureFromLinearIsNamedAsLinear() {
+        let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
+        let message = LinearTransport.failure(status: 400,
+                                              body: Data("no such team".utf8),
+                                              request: request)
+        XCTAssertEqual(message, "Linear returned 400: no such team")
+    }
+
+    /// Some servers answer an error with a whole HTML page. The message is read on a
+    /// phone, inside a row in the tray.
+    func testAVeryLongAnswerIsCutRatherThanDumped() {
+        let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
+        let message = LinearTransport.failure(status: 500,
+                                              body: Data(String(repeating: "x", count: 5000).utf8),
+                                              request: request)
+        XCTAssertLessThan(message.count, 500)
+        XCTAssertTrue(message.hasSuffix("\u{2026}"), "and it must say it was cut")
+    }
+
+    /// An empty body is a real answer too, and it has to read as a sentence rather
+    /// than trail off after a colon.
+    func testAnEmptyAnswerStillReadsLikeASentence() {
+        let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
+        let message = LinearTransport.failure(status: 502, body: Data(), request: request)
+        XCTAssertEqual(message, "Linear returned 502 and said nothing.")
+    }
 }

@@ -175,7 +175,35 @@ public final class LinearTransport: Transport, @unchecked Sendable {
             let after = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
             throw LinearError.rateLimited(retryAfter: after)
         default:
-            throw LinearError.api("Linear returned \(http.statusCode)")
+            throw LinearError.api(Self.failure(status: http.statusCode,
+                                               body: data,
+                                               request: request))
         }
+    }
+
+    /// What actually came back, not just the number.
+    ///
+    /// This threw away the body, and the body is the answer: Linear names the field
+    /// or the argument it did not like, and a signed upload URL says which header
+    /// broke the signature. "Linear returned 400" was true and useless - the ninth
+    /// failure on this project to know exactly what went wrong and say nothing.
+    ///
+    /// The host is named because `perform` is shared. An upload goes to a signed
+    /// storage URL rather than to Linear, so "Linear returned 400" was misdirecting
+    /// as well as empty, and the two have completely different causes.
+    static func failure(status: Int, body: Data, request: URLRequest) -> String {
+        let who = request.url?.host.map { $0.contains("linear.app") ? "Linear" : $0 }
+            ?? "The server"
+        let text = String(decoding: body, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "\(who) returned \(status) and said nothing." }
+
+        // Bounded: some servers answer an error with a page. Enough to name a field
+        // or a header, short enough to read on a phone.
+        let limit = 400
+        let shown = text.count > limit
+            ? String(text.prefix(limit)) + "\u{2026}"
+            : text
+        return "\(who) returned \(status): \(shown)"
     }
 }
