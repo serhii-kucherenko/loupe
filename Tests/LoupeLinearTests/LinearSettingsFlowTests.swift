@@ -259,6 +259,45 @@ final class LinearSettingsFlowTests: XCTestCase {
         XCTAssertFalse(LinearError.couldNotStore(errSecMissingEntitlement).isWorthRetrying)
     }
 
+    // MARK: - Signing out
+
+    /// The panel showed a full-width "Sign in with Linear" to somebody who already
+    /// had, because that branch never looked at the connection. Being able to tell
+    /// signed-in from signed-out is what the panel now renders from.
+    func testConnectingReportsSignedIn() async {
+        let flow = LinearSettingsFlow(settings: settings(),
+                                      makeDirectory: directory(Recorder()),
+                                      store: { _ in })
+        XCTAssertEqual(flow.connection, .idle)
+
+        await flow.test(key: "lin_api_abc")
+        XCTAssertEqual(flow.connection, .connected("Serhii"))
+        XCTAssertEqual(flow.person, "Serhii")
+    }
+
+    /// A destination left behind a credential that is gone is the same lie as one
+    /// left behind a credential that was refused: the panel reopens looking
+    /// configured and the next send fails for a reason nobody can see.
+    func testSigningOutForgetsTheDestinationTooAndNotJustTheKey() async {
+        let store = settings()
+        let flow = LinearSettingsFlow(settings: store,
+                                      makeDirectory: directory(Recorder()),
+                                      store: { _ in })
+        await flow.test(key: "lin_api_abc")
+        XCTAssertTrue(flow.save(key: "lin_api_abc"))
+        XCTAssertNotNil(store.destination)
+
+        flow.signOut()
+
+        XCTAssertEqual(flow.connection, .idle)
+        XCTAssertNil(flow.person)
+        XCTAssertNil(flow.workspace)
+        XCTAssertTrue(flow.teams.isEmpty)
+        XCTAssertTrue(flow.projects.isEmpty)
+        XCTAssertFalse(flow.canSave)
+        XCTAssertNil(store.destination, "signing out must not leave a team behind")
+    }
+
     func testAPersonalKeyIsSentBareAndAnythingElseAsABearer() {
         XCTAssertEqual(LinearSettingsFlow.credential(forTypedKey: "lin_api_abc"),
                        .apiKey("lin_api_abc"))

@@ -130,6 +130,24 @@ public final class LinearSettingsFlow: ObservableObject {
         projects = (try? await makeDirectory(credential).projects(teamID: teamID)) ?? []
     }
 
+    /// Forgets the credential and everything that depended on it.
+    ///
+    /// The destination goes too. A team id left behind a credential that no longer
+    /// exists is the same lie as one left behind a credential that was refused: the
+    /// panel reopens looking configured.
+    public func signOut() {
+        settings.clearCredential()
+        settings.destination = nil
+        credential = nil
+        person = nil
+        workspace = nil
+        teams = []
+        projects = []
+        teamID = ""
+        projectID = ""
+        connection = .idle
+    }
+
     /// Stores whatever is now true, and says whether it took.
     ///
     /// - Returns: `true` when everything was written. `false` means the credential was

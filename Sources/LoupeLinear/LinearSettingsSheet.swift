@@ -41,19 +41,29 @@ public struct LinearSettingsSheet: View {
             header
             Divider().overlay(LoupeTheme.Colors.line.color)
 
-            if let oauth {
-                // Full width, because it is the recommended path and a button that
-                // hugs its label reads as one option among several rather than as
-                // the one to take.
-                signIn(with: oauth)
-                    .frame(maxWidth: .infinity)
-                Text("or paste a key")
-                    .font(LoupeTheme.Typography.note)
-                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
-                    .frame(maxWidth: .infinity, alignment: .center)
+            // Signed in, or the two ways to sign in. Never both, and never a
+            // primary button saying "Sign in with Linear" to somebody who already
+            // has. That branch used to render whenever an OAuth application was
+            // configured and never looked at the connection at all, so the loudest
+            // thing on the panel contradicted the status line underneath it.
+            if isSignedIn {
+                signedIn
+            } else {
+                if let oauth {
+                    // Full width, because it is the recommended path and a button
+                    // that hugs its label reads as one option among several rather
+                    // than as the one to take.
+                    signIn(with: oauth)
+                        .frame(maxWidth: .infinity)
+                    Text("or paste a key")
+                        .font(LoupeTheme.Typography.note)
+                        .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+
+                credentialField
             }
 
-            credentialField
             status
 
             if !flow.teams.isEmpty {
@@ -81,6 +91,37 @@ public struct LinearSettingsSheet: View {
         .frame(width: 360)
         .loupePanel()
         .task { await flow.load() }
+    }
+
+    private var isSignedIn: Bool {
+        if case .connected = flow.connection { return true }
+        return false
+    }
+
+    /// Who is connected, and the way back out.
+    ///
+    /// Sign out rather than nothing: a key for the wrong workspace is the common
+    /// mistake, and somebody who can see they are signed in as the wrong person needs
+    /// a way to stop being.
+    private var signedIn: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
+                Text("Signed in")
+                    .font(LoupeTheme.Typography.note)
+                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+                Text(flow.person ?? "this workspace")
+                    .font(LoupeTheme.Typography.label)
+                    .foregroundStyle(LoupeTheme.Colors.ink.color)
+            }
+            Spacer()
+            Button("Sign out") {
+                key = ""
+                flow.signOut()
+            }
+            .buttonStyle(LoupeButtonStyle(kind: .secondary))
+            .accessibilityLabel("Sign out of Linear")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
