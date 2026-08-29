@@ -121,7 +121,7 @@ public struct LinearSettingsSheet: View {
             Task {
                 do {
                     let signedIn = try await LinearSignIn(oauth: oauth).run()
-                    _ = settings.save(signedIn)
+                    try settings.save(signedIn)
                     key = ""
                     await flow.connect(signedIn)
                 } catch {
@@ -174,8 +174,10 @@ public struct LinearSettingsSheet: View {
                 .disabled(key.isEmpty || flow.connection == .testing)
             Spacer()
             Button("Save") {
-                flow.save(key: key)
-                onClose()
+                // Only on a write that actually took. A panel that closes on a refused
+                // Keychain write is the whole of the bug this replaced: it looked
+                // exactly like success, and the key was gone on the next launch.
+                if flow.save(key: key) { onClose() }
             }
             .buttonStyle(LoupeButtonStyle(kind: .primary))
             .disabled(!flow.canSave)

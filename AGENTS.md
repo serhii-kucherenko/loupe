@@ -30,7 +30,15 @@ contract: additive changes only, no breaking renames without a major.
   `LoupeUI` and never compiles a line of Linear. The dependency that matters is the
   one that does not exist.
 - A credential belongs in the Keychain and nowhere else. There is a test asserting it
-  never reaches `UserDefaults`; keep it passing.
+  never reaches `UserDefaults`; keep it passing. **A refused write is an error somebody
+  must see, never a `Bool` that gets discarded** - `save(_:)` throws
+  `LinearError.couldNotStore`, the panel shows it and stays open, and the message names
+  the entitlement, because the fix is in the host's build settings and nobody guesses
+  it from a blank field. An adopter lost a key to the old silence: Test connection
+  passed, because it validated the value in memory, and the one operation that could
+  fail said nothing. Any host taking `LoupeLinear` needs the Keychain Sharing
+  capability, or `keychain-access-groups` with `$(AppIdentifierPrefix)` and its bundle
+  id. It is not optional on Mac Catalyst.
 - Anything written to Linear must be safe to repeat. `QueuedTransport` retries whole
   bundles, so a send that created three issues and then lost the network would
   otherwise create them again. `LinearTransport` searches for the annotation's marker

@@ -43,6 +43,24 @@ are pickers, because nobody types a UUID on an iPad.
 other. Sending is safe to repeat: a note whose issue already exists is a no-op, so a
 retry after a dropped connection cannot double-file.
 
+**Your app needs a Keychain entitlement, and this is not optional.** The credential is
+stored in the Keychain and nowhere else, and an app without the entitlement is refused
+outright - on Mac Catalyst especially. Add the **Keychain Sharing** capability, or set
+`keychain-access-groups` to `$(AppIdentifierPrefix)<your bundle id>`. Loupe says so in
+the panel if the write is refused, rather than closing as though it worked: an earlier
+version returned a discarded `Bool`, and somebody lost a key to that silence.
+
+To sign in with Linear instead of pasting a key, register an application at
+`https://linear.app/settings/api/applications/new`, give it a callback URL your app
+handles, and pass the client id:
+
+```swift
+LoupeLinear.enable(oauth: LinearOAuth(clientID: "…", redirectURI: "yourapp://linear"))
+```
+
+A client id is public - PKCE is what removes the need for a secret, so none ships in
+your binary. Leave `oauth` out and the panel offers the API key field alone.
+
 `LoupeCore` has no idea any of this exists. A host that wants capture only never
 takes the product.
 

@@ -20,8 +20,7 @@ final class LinearSettingsTests: XCTestCase {
     }
 
     func testACredentialSurvivesARoundTrip() throws {
-        try XCTSkipUnless(settings.save(.apiKey("lin_api_secret")),
-                          "no Keychain on this runner")
+        try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
         XCTAssertEqual(settings.credential(), .apiKey("lin_api_secret"))
     }
@@ -29,8 +28,7 @@ final class LinearSettingsTests: XCTestCase {
     // The prefix is Linear's own, and it decides whether the header says `Bearer`.
     // Getting it wrong is a 401 that looks like a bad key.
     func testAnOAuthTokenIsNotMistakenForAPersonalKey() throws {
-        try XCTSkipUnless(settings.save(.accessToken("oauth-token")),
-                          "no Keychain on this runner")
+        try skipIfKeychainRefuses { try settings.save(.accessToken("oauth-token")) }
 
         XCTAssertEqual(settings.credential(), .accessToken("oauth-token"))
     }
@@ -42,8 +40,7 @@ final class LinearSettingsTests: XCTestCase {
 
     func testClearingTheCredentialKeepsTheTeamSoNobodyHasToPickItTwice() throws {
         settings.destination = LinearDestination(teamID: "TEAM", projectID: "PROJ")
-        try XCTSkipUnless(settings.save(.apiKey("lin_api_secret")),
-                          "no Keychain on this runner")
+        try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
         settings.clearCredential()
 
@@ -60,20 +57,28 @@ final class LinearSettingsTests: XCTestCase {
 
     func testItRefusesToBuildATransportWithoutATeam() throws {
         settings.destination = nil
-        try XCTSkipUnless(settings.save(.apiKey("lin_api_secret")),
-                          "no Keychain on this runner")
+        try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
         XCTAssertThrowsError(try settings.transport())
     }
 
     // Whatever else changes, this must not: the credential is not in UserDefaults.
     func testTheCredentialIsNeverInUserDefaults() throws {
-        try XCTSkipUnless(settings.save(.apiKey("lin_api_secret")),
-                          "no Keychain on this runner")
+        try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
         let dumped = defaults.dictionaryRepresentation()
             .map { "\($0.key)=\($0.value)" }
             .joined(separator: "\n")
         XCTAssertFalse(dumped.contains("lin_api_secret"))
+    }
+
+    /// A Keychain write can be refused outright by the environment - a CI runner with
+    /// no keychain, an app with no entitlement - and that is not this test failing.
+    private func skipIfKeychainRefuses(_ write: () throws -> Void) throws {
+        do {
+            try write()
+        } catch LinearError.couldNotStore(let status) {
+            throw XCTSkip("the Keychain refused the write (OSStatus \(status))")
+        }
     }
 }

@@ -12,6 +12,13 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, Sendable {
     case rateLimited(retryAfter: TimeInterval?)
     case unreachable(String)
     case api(String)
+    /// The Keychain refused to store the credential.
+    ///
+    /// Its own case because it is the one failure whose fix is in the *host's* build
+    /// settings rather than in anything somebody typed, and because it used to be
+    /// silent: `save` returned a `Bool` that the panel discarded, so a key that was
+    /// never stored looked exactly like a key that was. Somebody lost one to that.
+    case couldNotStore(OSStatus)
 
     public var description: String {
         switch self {
@@ -28,6 +35,18 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, Sendable {
             return "Could not reach Linear: \(why)"
         case .api(let message):
             return message
+        case .couldNotStore(let status):
+            // -34018. The only status worth naming, because it is both the likeliest
+            // and the one nobody guesses: an app with no Keychain entitlement is
+            // refused outright, and every other part of the panel looks like it
+            // worked.
+            if status == errSecMissingEntitlement {
+                return "This app is not allowed to use the Keychain, so nothing was "
+                    + "saved. Add the Keychain Sharing capability - or "
+                    + "keychain-access-groups with $(AppIdentifierPrefix) and the "
+                    + "bundle id - then try again."
+            }
+            return "The Keychain refused to store the credential (OSStatus \(status))."
         }
     }
 
@@ -36,7 +55,8 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, Sendable {
     public var isWorthRetrying: Bool {
         switch self {
         case .rateLimited, .unreachable: return true
-        case .notConfigured, .credentialRejected, .notPermitted, .api: return false
+        case .notConfigured, .credentialRejected, .notPermitted, .api, .couldNotStore:
+            return false
         }
     }
 }

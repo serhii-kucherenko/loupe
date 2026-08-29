@@ -27,6 +27,12 @@ final class LinearSettingsFlowTests: XCTestCase {
         LinearSettings(account: account, defaults: defaults)
     }
 
+    /// A Keychain that will not have it, which is what an app with no entitlement
+    /// meets on Mac Catalyst.
+    private func refuses(_ credential: LinearCredential) throws {
+        throw LinearError.couldNotStore(errSecMissingEntitlement)
+    }
+
     /// A directory that answers every query from canned JSON, and counts what it was
     /// asked with, so "which credential did it actually use" is checkable.
     private final class Recorder: @unchecked Sendable {
@@ -91,9 +97,9 @@ final class LinearSettingsFlowTests: XCTestCase {
 
     /// Re-opening the panel said "connected" and showed no pickers, so Save stayed
     /// disabled with a perfectly good credential and nothing saying why.
-    func testReopeningWithASavedCredentialFillsThePickers() async {
+    func testReopeningWithASavedCredentialFillsThePickers() async throws {
         let saved = settings()
-        XCTAssertTrue(saved.save(.apiKey("lin_api_abc")))
+        try saved.save(.apiKey("lin_api_abc"))
 
         let recorder = Recorder()
         let flow = LinearSettingsFlow(settings: saved, makeDirectory: directory(recorder))
@@ -158,9 +164,9 @@ final class LinearSettingsFlowTests: XCTestCase {
         XCTAssertTrue(flow.canSave)
     }
 
-    func testATeamAlreadyChosenIsNotQuietlyMoved() async {
+    func testATeamAlreadyChosenIsNotQuietlyMoved() async throws {
         let saved = settings()
-        _ = saved.save(.apiKey("lin_api_abc"))
+        try saved.save(.apiKey("lin_api_abc"))
         saved.destination = LinearDestination(teamID: "t2", projectID: nil)
 
         let recorder = Recorder()
@@ -174,9 +180,9 @@ final class LinearSettingsFlowTests: XCTestCase {
 
     /// The saved team is honoured, but only if it still exists. Otherwise someone is
     /// sending into a team that was deleted and nothing says so.
-    func testATeamThatNoLongerExistsFallsBack() async {
+    func testATeamThatNoLongerExistsFallsBack() async throws {
         let saved = settings()
-        _ = saved.save(.apiKey("lin_api_abc"))
+        try saved.save(.apiKey("lin_api_abc"))
         saved.destination = LinearDestination(teamID: "gone", projectID: nil)
 
         let flow = LinearSettingsFlow(settings: saved, makeDirectory: directory(Recorder()))
@@ -208,6 +214,42 @@ final class LinearSettingsFlowTests: XCTestCase {
 
         XCTAssertEqual(flow.connection, .idle)
         XCTAssertTrue(recorder.queries.isEmpty)
+    }
+
+    // MARK: - A write that did not happen must not look like one that did
+
+    /// The bug this replaced, in one sentence: `save` returned a `Bool`, the panel
+    /// discarded it, and a Keychain that refused the write outright looked exactly
+    /// like one that took it. Somebody typed a key, saw Test connection pass,
+    /// relaunched, and found nothing there.
+    func testARefusedKeychainWriteIsReportedAndSaveSaysNo() async {
+        let flow = LinearSettingsFlow(settings: settings(),
+                                      makeDirectory: directory(Recorder()),
+                                      store: refuses)
+        await flow.test(key: "lin_api_abc")
+        XCTAssertTrue(flow.canSave)
+
+        XCTAssertFalse(flow.save(key: "lin_api_abc"),
+                       "a refused write must not report success")
+        XCTAssertEqual(flow.connection,
+                       .failed(LinearError.couldNotStore(errSecMissingEntitlement).description))
+    }
+
+    /// And the reason has to be actionable, because the fix is in the host's build
+    /// settings and nobody guesses "add a Keychain entitlement" from a blank field.
+    func testTheMissingEntitlementSaysWhatToDoAboutIt() {
+        let message = LinearError.couldNotStore(errSecMissingEntitlement).description
+        XCTAssertTrue(message.contains("Keychain Sharing"), message)
+        XCTAssertTrue(message.contains("keychain-access-groups"), message)
+
+        // Anything else at least carries the status, so it can be looked up.
+        XCTAssertTrue(LinearError.couldNotStore(-25300).description.contains("-25300"))
+    }
+
+    /// Nothing is worth retrying here: the Keychain will refuse it again for exactly
+    /// the same reason until somebody changes the build.
+    func testAKeychainRefusalIsNotRetried() {
+        XCTAssertFalse(LinearError.couldNotStore(errSecMissingEntitlement).isWorthRetrying)
     }
 
     func testAPersonalKeyIsSentBareAndAnythingElseAsABearer() {

@@ -36,11 +36,19 @@ public struct LinearSettings: @unchecked Sendable {
         return stored.hasPrefix("lin_api_") ? .apiKey(stored) : .accessToken(stored)
     }
 
-    @discardableResult
-    public func save(_ credential: LinearCredential) -> Bool {
+    /// Stores the credential, or says why it could not.
+    ///
+    /// Throwing rather than returning a `Bool`. The `Bool` was discardable and got
+    /// discarded, so a write the Keychain refused outright - which is what an app with
+    /// no Keychain entitlement gets on Mac Catalyst - looked exactly like a write that
+    /// worked. Somebody typed a key, saw Test connection pass, relaunched, and found
+    /// nothing there.
+    public func save(_ credential: LinearCredential) throws {
+        let status: OSStatus
         switch credential {
-        case .apiKey(let value), .accessToken(let value): return write(value)
+        case .apiKey(let value), .accessToken(let value): status = write(value)
         }
+        guard status == errSecSuccess else { throw LinearError.couldNotStore(status) }
     }
 
     @discardableResult
@@ -100,7 +108,7 @@ public struct LinearSettings: @unchecked Sendable {
         return value
     }
 
-    private func write(_ value: String) -> Bool {
+    private func write(_ value: String) -> OSStatus {
         let data = Data(value.utf8)
         // Delete first rather than branching on update-or-add: two paths that must
         // agree is one more place to be subtly wrong about an empty Keychain.
@@ -110,6 +118,6 @@ public struct LinearSettings: @unchecked Sendable {
         query[kSecValueData as String] = data
         // Never leaves the device, and is not needed before first unlock.
         query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        return SecItemAdd(query as CFDictionary, nil)
     }
 }

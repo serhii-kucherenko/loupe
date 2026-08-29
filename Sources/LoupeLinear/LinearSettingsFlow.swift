@@ -46,13 +46,21 @@ public final class LinearSettingsFlow: ObservableObject {
 
     private let settings: LinearSettings
     private let makeDirectory: (LinearCredential) -> LinearDirectory
+    /// How the credential is stored.
+    ///
+    /// A seam, so the one failure that matters can be tested without a machine that
+    /// refuses Keychain writes: an app with no Keychain entitlement is refused
+    /// outright on Mac Catalyst, and that used to be entirely silent.
+    private let store: (LinearCredential) throws -> Void
 
     public init(settings: LinearSettings = LinearSettings(),
                 makeDirectory: @escaping (LinearCredential) -> LinearDirectory = {
                     LinearDirectory(credential: $0)
-                }) {
+                },
+                store: ((LinearCredential) throws -> Void)? = nil) {
         self.settings = settings
         self.makeDirectory = makeDirectory
+        self.store = store ?? { try settings.save($0) }
     }
 
     /// Whether Save would do anything. A note has to have somewhere to go.
@@ -122,13 +130,28 @@ public final class LinearSettingsFlow: ObservableObject {
         projects = (try? await makeDirectory(credential).projects(teamID: teamID)) ?? []
     }
 
-    /// Stores whatever is now true. A typed key is saved; a credential that arrived by
-    /// signing in was already saved when it arrived.
-    public func save(key: String) {
-        if !key.isEmpty { settings.save(Self.credential(forTypedKey: key)) }
+    /// Stores whatever is now true, and says whether it took.
+    ///
+    /// - Returns: `true` when everything was written. `false` means the credential was
+    ///   refused and `connection` now carries the reason - the panel must not close on
+    ///   a `false`, because closing is what made the old silent failure look like
+    ///   success.
+    @discardableResult
+    public func save(key: String) -> Bool {
+        if !key.isEmpty {
+            do {
+                try store(Self.credential(forTypedKey: key))
+            } catch {
+                connection = .failed(Self.readable(error))
+                return false
+            }
+        }
+        // The destination is only useful with a credential behind it, so it is written
+        // second and only once the credential is safely down.
         settings.destination = LinearDestination(
             teamID: teamID,
             projectID: projectID.isEmpty ? nil : projectID)
+        return true
     }
 
     static func credential(forTypedKey key: String) -> LinearCredential {
