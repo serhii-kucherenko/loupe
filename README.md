@@ -221,6 +221,10 @@ inward, and the drawer comes out with every note, the settings, and Send:
 The drawer never opens itself. Saving a note changes the number on the pull and
 nothing else, so the layout under your hands stays where you left it.
 
+Each note is one row: a thumbnail, two lines of what you said, and the endpoint
+behind it. Tap the words to rewrite them; tap the picture to see the whole thing. A
+drawer full of notes is a list you scan, not a gallery.
+
 Drag to say "this bit", on any platform. The rectangle is dashed while you draw it
 and solid once it is yours:
 

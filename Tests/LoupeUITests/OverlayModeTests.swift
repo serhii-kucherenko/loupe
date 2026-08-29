@@ -276,6 +276,45 @@ final class OverlayModeTests: XCTestCase {
         XCTAssertTrue(canRetry)
     }
 
+
+    // MARK: - Editing a note you already wrote
+
+    /// The one thing you could not do without deleting the note and picking the
+    /// element again. `updateComment` has always existed; nothing in the tray offered
+    /// it, so the capability was there and unreachable - the same shape as the
+    /// settings panel behind a tray that did not exist yet.
+    func testANoteCanBeRewrittenWithoutLosingWhatWasCaptured() {
+        let model = makeModel()
+        model.beginAnnotating()
+        model.pick(ref("row"), screenshotPNG: Data("crop".utf8))
+        model.saveComment("stock count is wrong", tag: .bug)
+
+        let note = try! XCTUnwrap(model.annotations.first)
+        model.updateComment(id: note.id, comment: "stock count is unreadable at that size")
+
+        let after = model.annotations.first
+        XCTAssertEqual(after?.comment, "stock count is unreadable at that size")
+        XCTAssertEqual(after?.id, note.id, "it is the same note, not a new one")
+        XCTAssertEqual(after?.screenshotPNG, Data("crop".utf8),
+                       "rewriting the words must not lose the picture")
+        XCTAssertEqual(after?.element.accessibilityID, "row",
+                       "nor what it was pointing at")
+        XCTAssertEqual(after?.tag, .bug)
+    }
+
+    func testEditingOneNoteLeavesTheOthersAlone() {
+        let model = makeModel()
+        model.beginAnnotating()
+        model.pick(ref("a")); model.saveComment("first", tag: nil)
+        model.resumePicking()
+        model.pick(ref("b")); model.saveComment("second", tag: nil)
+
+        let first = try! XCTUnwrap(model.annotations.first)
+        model.updateComment(id: first.id, comment: "first, rewritten")
+
+        XCTAssertEqual(model.annotations.map(\.comment), ["first, rewritten", "second"])
+    }
+
 }
 
 /// The tray must never be the reason part of the app cannot be pointed at.

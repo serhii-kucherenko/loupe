@@ -55,7 +55,11 @@ struct TrayPanel: View {
                             TrayRow(index: index + 1,
                                     annotation: annotation,
                                     onRemove: { model.remove(id: annotation.id) },
-                                    onTag: { model.updateTag(id: annotation.id, tag: $0) })
+                                    onTag: { model.updateTag(id: annotation.id, tag: $0) },
+                                    onEdit: { model.updateComment(id: annotation.id, comment: $0) },
+                                    onPreview: { model.present(AnyView(CropPreview(png: $0) {
+                                        model.dismissPanel()
+                                    })) })
                             if annotation.id != model.annotations.last?.id {
                                 Divider().overlay(LoupeTheme.Colors.line.color)
                             }
@@ -184,22 +188,41 @@ struct TrayPanel: View {
 }
 
 /// One annotation. The badge, the crop, what you said, and what the screen called.
+///
+/// A drawer full of notes is a list you scan, not a gallery. The crop used to be a
+/// 96pt-tall picture across the full width, so three notes filled the panel and
+/// finding the fourth meant scrolling past pictures you had already recognised. It
+/// is a thumbnail beside the text now, and tapping it opens the whole thing.
 struct TrayRow: View {
     let index: Int
     let annotation: Annotation
     var onRemove: () -> Void
     var onTag: (AnnotationTag?) -> Void
+    /// Editing the words is the one thing you could not do without deleting the note
+    /// and picking the element again. The model could always do it; nothing offered it.
+    var onEdit: (String) -> Void = { _ in }
+    /// Shows the crop full size, since a thumbnail is for recognising rather than
+    /// reading.
+    var onPreview: (Data) -> Void = { _ in }
+
+    @State private var isEditing = false
+    @State private var draft = ""
+    @FocusState private var editing: Bool
+
+    /// Square, and the size of a touch target rather than a picture. Big enough to
+    /// tell one note from another at a glance, which is all a thumbnail owes anybody.
+    private var thumbnailSize: CGFloat { LoupeTheme.Hit.touch }
 
     var body: some View {
         HStack(alignment: .top, spacing: LoupeTheme.Space.md) {
             BadgeView(number: index)
 
-            VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
-                if let png = annotation.screenshotPNG, let image = Image(loupePNG: png) {
+            if let png = annotation.screenshotPNG, let image = Image(loupePNG: png) {
+                Button { onPreview(png) } label: {
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 96, alignment: .leading)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: thumbnailSize, height: thumbnailSize)
                         .clipShape(RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight,
                                                     style: .continuous))
                         .overlay(
@@ -208,13 +231,13 @@ struct TrayRow: View {
                                 .strokeBorder(LoupeTheme.Colors.line.color,
                                               lineWidth: LoupeTheme.Stroke.hairline)
                         )
-                        .accessibilityHidden(true)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show the picture for note \(index)")
+            }
 
-                Text(annotation.comment)
-                    .font(LoupeTheme.Typography.body)
-                    .foregroundStyle(LoupeTheme.Colors.ink.color)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
+                comment
 
                 if let detail = annotation.element.accessibilityID
                     ?? annotation.element.selector
@@ -263,6 +286,66 @@ struct TrayRow: View {
     }
 
     /// At most three, newest first. A wall of polling requests helps nobody.
+    /// What you said, in two lines, until you tap it.
+    ///
+    /// Two rather than all of them because the list is for finding a note, and a
+    /// paragraph pushes the next one off the screen. Tapping opens the whole thing to
+    /// edit, which is also how you read past the second line.
+    @ViewBuilder
+    private var comment: some View {
+        if isEditing {
+            VStack(alignment: .leading, spacing: LoupeTheme.Space.xs) {
+                TextField("What is wrong", text: $draft, axis: .vertical)
+                    .font(LoupeTheme.Typography.body)
+                    .foregroundStyle(LoupeTheme.Colors.ink.color)
+                    .textFieldStyle(.plain)
+                    .focused($editing)
+                    .padding(LoupeTheme.Space.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.control,
+                                         style: .continuous)
+                            .strokeBorder(LoupeTheme.Colors.line.color,
+                                          lineWidth: LoupeTheme.Stroke.hairline))
+                    .accessibilityLabel("Edit note \(index)")
+
+                HStack(spacing: LoupeTheme.Space.sm) {
+                    Button("Cancel") { isEditing = false }
+                        .buttonStyle(LoupeButtonStyle(kind: .quiet))
+                    Button("Save") { commit() }
+                        .buttonStyle(LoupeButtonStyle(kind: .secondary))
+                        // An empty note is a note nobody can act on. Deleting is what
+                        // the bin is for, and doing it silently through an edit is not
+                        // the same thing.
+                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        } else {
+            Button {
+                draft = annotation.comment
+                isEditing = true
+                editing = true
+            } label: {
+                Text(annotation.comment)
+                    .font(LoupeTheme.Typography.body)
+                    .foregroundStyle(LoupeTheme.Colors.ink.color)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Note \(index): \(annotation.comment)")
+            .accessibilityHint("Opens it for editing")
+        }
+    }
+
+    private func commit() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onEdit(trimmed)
+        isEditing = false
+    }
+
     private var endpoints: [String] {
         var seen = Set<String>()
         var result: [String] = []
@@ -279,5 +362,52 @@ struct TrayRow: View {
         let errors = annotation.logs.filter { $0.level == .error }
         guard let first = errors.first else { return nil }
         return errors.count == 1 ? first.message : "\(first.message) (+\(errors.count - 1) more)"
+    }
+}
+
+/// The crop, big enough to read.
+///
+/// The thumbnail in the row is for telling one note from another; this is for
+/// looking at what was actually captured. It reuses the overlay's own panel slot, so
+/// it arrives over the scrim with everything else dimmed and a tap outside closes it.
+struct CropPreview: View {
+    let png: Data
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LoupeTheme.Space.md) {
+            HStack {
+                Text("What was captured")
+                    .font(LoupeTheme.Typography.label)
+                    .foregroundStyle(LoupeTheme.Colors.ink.color)
+                Spacer()
+                Button("Close", action: onClose)
+                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
+            }
+
+            if let image = Image(loupePNG: png) {
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    // Bounded, because a context shot of a whole iPad screen would
+                    // otherwise fill the display and lose the panel around it.
+                    .frame(maxWidth: 520, maxHeight: 520)
+                    .clipShape(RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight,
+                                                style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight,
+                                         style: .continuous)
+                            .strokeBorder(LoupeTheme.Colors.line.color,
+                                          lineWidth: LoupeTheme.Stroke.hairline))
+                    .accessibilityLabel("The captured element")
+            } else {
+                Text("That picture could not be read.")
+                    .font(LoupeTheme.Typography.note)
+                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+            }
+        }
+        .padding(LoupeTheme.Space.md)
+        .fixedSize()
+        .loupePanel()
     }
 }
