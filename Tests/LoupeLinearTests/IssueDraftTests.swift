@@ -113,3 +113,24 @@ final class IssueDraftTests: XCTestCase {
         XCTAssertTrue(errorLine!.lowerBound < debugLine!.lowerBound)
     }
 }
+
+extension IssueDraftTests {
+    /// The sentence is read by a person deciding whether to add the label, so it is
+    /// worth looking at rather than only asserting a substring of.
+    func testTheUnmatchedTagReadsAsASentence() {
+        let draft = IssueDraft(annotation: annotation("the row is cut off"),
+                               bundle: bundle())
+        let line = draft.description.split(separator: "\n")
+            .first { $0.hasPrefix("Tagged") }
+        XCTAssertEqual(String(line ?? ""),
+                       "Tagged **polish** - this workspace has no label of that name, "
+                       + "so none was set.")
+    }
+
+    func testAMatchedTagSaysNothingExtra() {
+        let draft = IssueDraft(annotation: annotation("the row is cut off"),
+                               bundle: bundle(), labelID: "label-1")
+        XCTAssertFalse(draft.description.contains("Tagged **polish**"),
+                       "the label itself is on the issue, so the sentence would be noise")
+    }
+}
