@@ -151,7 +151,22 @@ public final class LinearSettingsFlow: ObservableObject {
             projects = []
             return
         }
-        projects = (try? await makeDirectory(credential).projects(teamID: teamID)) ?? []
+        do {
+            let found = try await makeDirectory(credential).projects(teamID: teamID)
+            projects = found
+            // A project that is genuinely gone must not stay chosen, the same rule
+            // teams already follow. Only on an answer, though: `try?` used to turn a
+            // dropped call into an empty list, so a blocked network read exactly like
+            // "your project no longer exists" and quietly moved where notes go.
+            if !projectID.isEmpty, !found.contains(where: { $0.id == projectID }) {
+                projectID = ""
+            }
+        } catch {
+            // The list belongs to a team that may have just changed, so it cannot be
+            // kept - but the chosen project is the person's, not Linear's, and one
+            // failed request is no reason to throw it away.
+            projects = []
+        }
     }
 
     /// Asks Linear again with the credential already proved.
