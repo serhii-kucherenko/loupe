@@ -63,7 +63,8 @@ public final class LinearTransport: Transport, @unchecked Sendable {
           }
         }
         """
-        let data = try await graphQL(query, ["marker": IssueDraft.marker(for: id)])
+        let data = try await graphQL(query, ["marker": IssueDraft.marker(for: id)],
+                                     called: "the duplicate check")
         let issues = (data["issues"] as? [String: Any])?["nodes"] as? [[String: Any]]
         return !(issues ?? []).isEmpty
     }
@@ -85,7 +86,7 @@ public final class LinearTransport: Transport, @unchecked Sendable {
         """
         let data = try await graphQL(mutation, [
             "contentType": "image/png", "filename": filename, "size": png.count,
-        ])
+        ], called: "the image upload")
 
         guard let payload = (data["fileUpload"] as? [String: Any])?["uploadFile"]
                 as? [String: Any],
@@ -136,7 +137,7 @@ public final class LinearTransport: Transport, @unchecked Sendable {
         if let project = destination.projectID { input["projectId"] = project }
         if let delegate = destination.delegateID { input["delegateId"] = delegate }
 
-        let data = try await graphQL(mutation, ["input": input])
+        let data = try await graphQL(mutation, ["input": input], called: "filing the issue")
         let created = (data["issueCreate"] as? [String: Any])?["success"] as? Bool
         guard created == true else {
             throw LinearError.api("Linear declined to create the issue")
@@ -145,7 +146,17 @@ public final class LinearTransport: Transport, @unchecked Sendable {
 
     // MARK: - Transport
 
-    private func graphQL(_ query: String, _ variables: [String: Any]) async throws -> [String: Any] {
+    /// - Parameter operation: which of the three calls this is, in words, so a
+    ///   refusal names it.
+    ///
+    ///   A send makes three requests - a duplicate check, an upload, and the create -
+    ///   and they need different permissions. When Linear refused the first real send
+    ///   with `Invalid scope: 'write' required`, nothing said which of the three had
+    ///   been refused, so the only way to find out was to change something on the
+    ///   account and try again. Every one of those rounds costs somebody a reinstall.
+    private func graphQL(_ query: String,
+                         _ variables: [String: Any],
+                         called operation: String) async throws -> [String: Any] {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -153,9 +164,15 @@ public final class LinearTransport: Transport, @unchecked Sendable {
         request.httpBody = try JSONSerialization.data(
             withJSONObject: ["query": query, "variables": variables])
 
-        let data = try await perform(request)
+        let data: Data
+        do {
+            data = try await perform(request)
+        } catch {
+            throw LinearError.naming(operation, in: error)
+        }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw LinearError.api("Linear returned something that is not JSON")
+            throw LinearError.api("Linear returned something that is not JSON "
+                                  + "when asked for \(operation).")
         }
         // A GraphQL error arrives with HTTP 200, so the status code alone proves
         // nothing about whether the thing was done.
@@ -164,7 +181,7 @@ public final class LinearTransport: Transport, @unchecked Sendable {
             // Read for whether it is about access. "Access denied" is true and
             // useless: it does not say the credential is too narrow, and it does
             // not say that signing in again would fix it.
-            throw LinearError.fromGraphQL(first)
+            throw LinearError.fromGraphQL(first, during: operation)
         }
         return json["data"] as? [String: Any] ?? [:]
     }

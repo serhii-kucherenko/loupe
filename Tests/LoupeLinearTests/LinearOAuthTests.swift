@@ -46,8 +46,11 @@ final class LinearOAuthTests: XCTestCase {
     func testTheAuthorizationURLAsksForOnlyWhatLoupeNeeds() {
         let query = items(oauth.authorizationURL(proof: LinearOAuth.Proof(), state: "s"))
 
-        XCTAssertEqual(query["scope"], "issues:create",
+        XCTAssertEqual(query["scope"], "read issues:create",
                        "Loupe files issues; it has no business deleting them")
+        XCTAssertFalse(query["scope"]?.contains("write") ?? true,
+                       "write is account-wide, and filing an issue is not that")
+        XCTAssertFalse(query["scope"]?.contains("admin") ?? true)
         XCTAssertEqual(query["code_challenge_method"], "S256")
         XCTAssertEqual(query["response_type"], "code")
         XCTAssertNotNil(query["code_challenge"])

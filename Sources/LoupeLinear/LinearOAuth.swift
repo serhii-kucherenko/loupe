@@ -11,13 +11,21 @@ import AuthenticationServices
 /// ship a secret could not do OAuth honestly: anything in the binary is not a
 /// secret, and pretending otherwise is worse than an API key field.
 ///
-/// The scope is `issues:create`, not `write`. Loupe files issues; it has no business
-/// being able to delete them.
+/// The scope is `read issues:create`, not `write`. Loupe files issues; it has no
+/// business being able to delete them.
+///
+/// **`read` is explicit and not decoration.** Linear's own table calls it "(Default)
+/// … This scope will always be present", but Loupe's first call is a *read* -
+/// `issues(filter:)`, asked before every create so a retried bundle cannot file the
+/// same note twice - and a permission the SDK depends on should be requested by name
+/// rather than relied on as an implicit default. It also means the consent screen
+/// tells the truth about what Loupe does.
 public struct LinearOAuth: Sendable {
 
     public static let authorizeURL = URL(string: "https://linear.app/oauth/authorize")!
     public static let tokenURL = URL(string: "https://api.linear.app/oauth/token")!
-    public static let scope = "issues:create"
+    /// Space-separated, which is what RFC 6749 specifies and what Linear parses.
+    public static let scope = "read issues:create"
 
     /// From the OAuth application someone registers in their own workspace. Public
     /// by design - a client id is not a credential.

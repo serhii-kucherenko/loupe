@@ -102,13 +102,22 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .api("\(who) returned \(status) and said nothing.") }
 
-        // Bounded: some servers answer an error with a page. Enough to name a field
-        // or a header, short enough to read on a phone.
-        let limit = 400
-        let shown = text.count > limit
-            ? String(text.prefix(limit)) + "\u{2026}"
-            : text
-        return .api("\(who) returned \(status): \(shown)")
+        // The words decide, not the status. Linear answered the first real send with
+        // HTTP 400 carrying `Invalid scope: 'write' required` and an inner
+        // `"statusCode": 403` - so the refusal was there in plain English and the
+        // status code disagreed with it. Reading only the status sent that down the
+        // generic path and printed a scope problem as an unexplained 400.
+        if case .credentialTooNarrow = fromGraphQL(text) {
+            return .credentialTooNarrow("\(who) returned \(status): \(trimmed(text))")
+        }
+
+        return .api("\(who) returned \(status): \(trimmed(text))")
+    }
+
+    /// Bounded: some servers answer an error with a page. Enough to name a field, a
+    /// header or a scope, short enough to read in a row in the tray on a phone.
+    private static func trimmed(_ text: String, limit: Int = 400) -> String {
+        text.count > limit ? String(text.prefix(limit)) + "\u{2026}" : text
     }
 
     /// A GraphQL failure, read for whether it is about access.
@@ -121,7 +130,7 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
     /// about access stays exactly what it was. Sending somebody to re-authenticate
     /// over a missing team or a dropped connection is worse than a vague message,
     /// because it is confidently wrong and costs them an evening on the wrong fix.
-    static func fromGraphQL(_ message: String) -> LinearError {
+    static func fromGraphQL(_ message: String, during operation: String? = nil) -> LinearError {
         let said = message.lowercased()
         let aboutAccess = ["access denied", "not authorized", "unauthorized",
                            "forbidden", "permission", "scope"]
@@ -129,9 +138,36 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
         // list is a heuristic either way. Being wrong here costs a sentence of
         // advice; being silent costs the evening.
         if aboutAccess.contains(where: said.contains) {
-            return .credentialTooNarrow(message)
+            return .credentialTooNarrow(prefixed(message, with: operation))
         }
-        return .api(message)
+        return .api(prefixed(message, with: operation))
+    }
+
+    /// Which call this was, when the caller knows.
+    ///
+    /// A send is three requests with three different permission needs, and a refusal
+    /// that names none of them can only be narrowed by changing something and trying
+    /// again. Each of those rounds costs somebody a reinstall.
+    private static func prefixed(_ message: String, with operation: String?) -> String {
+        guard let operation else { return message }
+        return "\(operation): \(message)"
+    }
+
+    /// Puts the operation's name on an error thrown from deeper down.
+    ///
+    /// The HTTP layer is shared by all three calls and cannot know which it is
+    /// serving, so the naming happens on the way back out. Only `LinearError`s that
+    /// carry a message are touched: a rate limit or a rejected key means the same
+    /// thing whichever call hit it, and adding a label there would be noise.
+    static func naming(_ operation: String, in error: Error) -> Error {
+        switch error {
+        case LinearError.api(let message):
+            return LinearError.api(prefixed(message, with: operation))
+        case LinearError.credentialTooNarrow(let said):
+            return LinearError.credentialTooNarrow(prefixed(said, with: operation))
+        default:
+            return error
+        }
     }
 
     /// Whether leaving it in the queue could plausibly help. A rejected key will be

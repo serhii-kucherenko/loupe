@@ -185,7 +185,10 @@ final class LinearTransportTests: XCTestCase {
             try await transport.send(bundle(["a note"]))
             XCTFail("expected the send to throw")
         } catch {
-            XCTAssertEqual(error as? LinearError, .api("Team not found"))
+            // Named. A send is three calls with three different permission needs,
+            // and "Team not found" alone cannot be narrowed without another attempt.
+            XCTAssertEqual(error as? LinearError,
+                           .api("the duplicate check: Team not found"))
         }
     }
 
@@ -215,6 +218,8 @@ final class LinearTransportTests: XCTestCase {
             XCTAssertTrue(message.contains("Argument Validation Error"),
                           "the server's own words are the whole point: \(message)")
             XCTAssertTrue(message.contains("400"), message)
+            XCTAssertTrue(message.contains("the duplicate check"),
+                          "and which of the three calls it was: \(message)")
         }
     }
 
@@ -258,5 +263,42 @@ final class LinearTransportTests: XCTestCase {
         let request = URLRequest(url: URL(string: "https://api.linear.app/graphql")!)
         let message = LinearError.fromHTTP(status: 502, body: Data(), request: request).description
         XCTAssertEqual(message, "Linear returned 502 and said nothing.")
+    }
+
+    /// The failure that actually happened, on Serhii's iPad, on the first real send:
+    /// HTTP 400 carrying `Invalid scope: 'write' required` and an inner
+    /// `"statusCode": 403`. The refusal was in plain English in the body and the
+    /// status code disagreed with it, so reading only the status printed a scope
+    /// problem as an unexplained 400 and cost a whole round trip.
+    func testAScopeRefusalIsRecognisedEvenWhenTheStatusSaysOtherwise() async {
+        let said = """
+        {"errors":[{"message":"Invalid scope: 'write' required","extensions":        {"type":"forbidden","code":"FORBIDDEN","statusCode":403,"userError":true}}]}
+        """
+        let transport = LinearTransport(
+            credential: .accessToken("oauth-token"),
+            destination: LinearDestination(teamID: "TEAM"),
+            fetch: { request in
+                (Data(said.utf8),
+                 HTTPURLResponse(url: request.url!, statusCode: 400,
+                                 httpVersion: nil, headerFields: nil)!)
+            })
+
+        do {
+            try await transport.send(bundle(["never landed"]))
+            XCTFail("expected the send to throw")
+        } catch let error as LinearError {
+            guard case .credentialTooNarrow = error else {
+                return XCTFail("a scope refusal must read as one, not as a bare 400: \(error)")
+            }
+            let message = error.localizedDescription
+            XCTAssertTrue(message.contains("sign in again"),
+                          "and it must say what would fix it: \(message)")
+            XCTAssertTrue(message.contains("Invalid scope"), message)
+            XCTAssertTrue(message.contains("the duplicate check"),
+                          "which call was refused is the next question: \(message)")
+            XCTAssertFalse(error.isWorthRetrying, "the same scope will be just as narrow")
+        } catch {
+            XCTFail("expected a LinearError, got \(error)")
+        }
     }
 }
