@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import LoupeCore
 
@@ -154,10 +155,31 @@ public extension LoupeTheme {
 
     /// The theme in force. Set by `Loupe.start(app:transport:theme:)`.
     ///
-    /// Main-actor because the overlay is drawn on the main thread and nothing else
-    /// reads it - which makes this a plain variable rather than a lock.
-    @MainActor static var appearance: Appearance = .stock
+    /// Behind a lock rather than `@MainActor`, and that is not a style choice. Every
+    /// token accessor reads this, and they are read from SwiftUI `body`s - which are
+    /// main-actor on a new enough SDK and *not* on an older one. Isolating the theme
+    /// compiled on one toolchain and failed the build on CI's, in eleven places.
+    /// A lock is true on every toolchain, and it is one uncontended acquire per read.
+    static var appearance: Appearance {
+        get { themeStore.current }
+        set { themeStore.current = newValue }
+    }
 }
+
+/// One value, read from wherever the overlay happens to be drawn.
+///
+/// `@unchecked` is argued for by the lock: every access to `value` goes through it.
+private final class ThemeStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = LoupeTheme.Appearance.stock
+
+    var current: LoupeTheme.Appearance {
+        get { lock.lock(); defer { lock.unlock() }; return value }
+        set { lock.lock(); defer { lock.unlock() }; value = newValue }
+    }
+}
+
+private let themeStore = ThemeStore()
 
 // MARK: - Colour
 
@@ -261,16 +283,16 @@ public extension LoupeTheme {
     /// outside this file has ever named a colour, which is what made that possible.
     enum Colors {
         /// The picked element outline, tray index badges, and the focus ring.
-        @MainActor public static var highlight: ColorToken { appearance.accent }
+        public static var highlight: ColorToken { appearance.accent }
         /// The wash inside a picked element.
-        @MainActor public static var highlightFill: ColorToken { appearance.accentFill }
+        public static var highlightFill: ColorToken { appearance.accentFill }
         /// Tray and comment panels.
-        @MainActor public static var surface: ColorToken { appearance.surface }
-        @MainActor public static var ink: ColorToken { appearance.ink }
-        @MainActor public static var inkSoft: ColorToken { appearance.inkSoft }
-        @MainActor public static var line: ColorToken { appearance.line }
+        public static var surface: ColorToken { appearance.surface }
+        public static var ink: ColorToken { appearance.ink }
+        public static var inkSoft: ColorToken { appearance.inkSoft }
+        public static var line: ColorToken { appearance.line }
         /// Send button, confirmation.
-        @MainActor public static var action: ColorToken { appearance.action }
+        public static var action: ColorToken { appearance.action }
 
         /// The ground behind a letterboxed thumbnail.
         ///
@@ -281,14 +303,14 @@ public extension LoupeTheme {
         ///
         /// Not `backdrop`, which is flat white: on a light panel a white ground makes
         /// a pale screenshot look like it is bleeding into the row.
-        @MainActor public static var cutaway: ColorToken { appearance.cutaway }
+        public static var cutaway: ColorToken { appearance.cutaway }
 
         /// Dimming behind the tray, and over the whole screen while picking.
         ///
         /// Deliberately barely there: while picking, the app underneath is the thing
         /// being read, and anything heavier would make it hard to see what you are
         /// pointing at.
-        @MainActor public static var scrim: ColorToken { appearance.scrim }
+        public static var scrim: ColorToken { appearance.scrim }
 
         /// Behind a panel that has to be answered before anything else.
         ///
@@ -296,14 +318,14 @@ public extension LoupeTheme {
         /// value cannot do both. At 8% a settings panel left the tray behind it at
         /// full strength, so three primary buttons competed on one screen and none of
         /// them read as the thing to press.
-        @MainActor public static var scrimModal: ColorToken { appearance.scrimModal }
+        public static var scrimModal: ColorToken { appearance.scrimModal }
 
         /// What a translucent surface actually sits on. Only used to check contrast.
-        @MainActor public static var backdrop: ColorToken { appearance.backdrop }
+        public static var backdrop: ColorToken { appearance.backdrop }
     }
 
     /// Tags reuse the palette rather than adding colours.
-    @MainActor static func color(for tag: AnnotationTag) -> ColorToken {
+    static func color(for tag: AnnotationTag) -> ColorToken {
         switch tag {
         case .bug: return Colors.highlight
         case .polish, .idea: return Colors.inkSoft
@@ -318,17 +340,17 @@ public extension LoupeTheme {
     /// System faces only. The overlay must not ship fonts or clash with the host app.
     enum Typography {
         /// Comment text.
-        @MainActor public static var body: Font { appearance.body }
+        public static var body: Font { appearance.body }
         /// Panel titles, buttons.
-        @MainActor public static var label: Font { appearance.label }
+        public static var label: Font { appearance.label }
         /// Endpoints, counts, element names. Monospaced because it is machine text
         /// and the eye should be able to tell it from a sentence at a glance.
-        @MainActor public static var caption: Font { appearance.caption }
+        public static var caption: Font { appearance.caption }
         /// Small prose: field labels, hints, status lines. The same size as
         /// `caption` and deliberately not monospaced - a settings panel written in
         /// a code face reads as output rather than as something to fill in, and it
         /// wraps far worse in a narrow column.
-        @MainActor public static var note: Font { appearance.note }
+        public static var note: Font { appearance.note }
     }
 }
 
@@ -349,11 +371,11 @@ public extension LoupeTheme {
 
     enum Radius {
         /// Tray, comment popover.
-        @MainActor public static var panel: CGFloat { appearance.panelRadius }
+        public static var panel: CGFloat { appearance.panelRadius }
         /// Buttons, tag chips.
-        @MainActor public static var control: CGFloat { appearance.controlRadius }
+        public static var control: CGFloat { appearance.controlRadius }
         /// The outline around a picked element.
-        @MainActor public static var highlight: CGFloat { appearance.highlightRadius }
+        public static var highlight: CGFloat { appearance.highlightRadius }
     }
 
     enum Stroke {
@@ -405,7 +427,6 @@ public extension LoupeTheme {
 
 public extension View {
     /// The panel treatment from `DESIGN.md`: translucent surface, hairline, elevation.
-    @MainActor
     func loupePanel() -> some View {
         self
             .background(
@@ -439,9 +460,8 @@ public extension View {
     /// A visible focus ring that never animates in. See `DESIGN.md`.
     ///
     /// - Parameter cornerRadius: nil takes the theme's control radius. It cannot be
-    ///   the default *expression*, because the theme is main-actor state now and a
-    ///   default argument is evaluated wherever the caller happens to be.
-    @MainActor
+    ///   the default *expression*: the theme is a stored value now, so a default
+    ///   argument would freeze whatever it held when the caller was compiled.
     @ViewBuilder
     func loupeFocusRing(_ focused: Bool, cornerRadius: CGFloat? = nil) -> some View {
         let radius = cornerRadius ?? LoupeTheme.Radius.control

@@ -9,7 +9,6 @@ import LoupeCore
 ///
 /// "the button is not following design system buttons that I already have in the
 /// app" - Serhii, 2026-08-29, looking at Loupe on top of Reco.
-@MainActor
 final class HostThemeTests: XCTestCase {
 
     private let blue = LoupeTheme.ColorToken(light: LoupeTheme.RGBA(hex: 0x2563EB),
@@ -17,15 +16,12 @@ final class HostThemeTests: XCTestCase {
 
     // The theme is global by design - one overlay, one app - so a test that changes
     // it has to put it back, or every later test is reading this one's opinion.
-    //
-    // `assumeIsolated` because `tearDown()` is nonisolated even inside a `@MainActor`
-    // class, and the async overload would send a non-Sendable `XCTestCase` across
-    // isolation. XCTest runs these on the main thread, so the assumption is true.
     override func tearDown() {
-        MainActor.assumeIsolated { LoupeTheme.appearance = .stock }
+        LoupeTheme.appearance = .stock
         super.tearDown()
     }
 
+    @MainActor
     private func startLoupe(theme: LoupeTheme.Appearance) {
         Loupe.start(app: AppInfo(name: "Demo", platform: "macOS"),
                     transport: FileTransport(directory: URL(fileURLWithPath:
@@ -97,6 +93,7 @@ final class HostThemeTests: XCTestCase {
     /// An SDK that changes how the app looks the moment it is linked is an SDK
     /// nobody ships. Starting without a theme has to be the same picture as before
     /// the theming hook existed.
+    @MainActor
     func testStartingWithNoThemeIsExactlyLoupesOwnLook() {
         LoupeTheme.appearance = LoupeTheme.Appearance(accent: blue)
 
@@ -105,6 +102,7 @@ final class HostThemeTests: XCTestCase {
         XCTAssertEqual(LoupeTheme.appearance, .stock)
     }
 
+    @MainActor
     func testStartAppliesTheHostsThemeAndStopPutsLoupesBack() {
         startLoupe(theme: LoupeTheme.Appearance(accent: blue))
         XCTAssertEqual(LoupeTheme.Colors.highlight, blue)

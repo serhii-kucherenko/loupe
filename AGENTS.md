@@ -51,6 +51,11 @@ contract: additive changes only, no breaking renames without a major.
   `errSecItemNotFound`, which is a mistake worth not making twice. Swift 6 mode
   rejects things the package's declared Swift 5 accepts, including a nonisolated
   `setUp` touching a `@MainActor` case's own properties.
+- **`@MainActor` on anything a SwiftUI `body` reads is a toolchain gamble.** `View`
+  is main-actor-isolated on a new enough SDK and is not on an older one, so isolating
+  the theme built clean here and failed CI's macOS job in eleven places at once. If a
+  value is read from `body`, reach for a lock rather than an actor: a lock means the
+  same thing on every toolchain. `LoupeTheme.appearance` is the worked example.
 - **A colour, font or radius outside `LoupeTheme.swift` is a build failure.**
   `python3 scripts/check-theme-literals.py`. A host app can hand Loupe its own tokens,
   and that promise is only as good as the weakest call site: one hardcoded orange and
