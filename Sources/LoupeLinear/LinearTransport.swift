@@ -32,24 +32,35 @@ public final class LinearTransport: Transport, @unchecked Sendable {
     }
 
     public func send(_ bundle: AnnotationBundle) async throws {
+        // Read once for the whole bundle, and only if something in it is tagged.
+        // The answer is the same for every note, and it is a whole round trip.
+        var labels: [LinearLabel]?
+
         for annotation in bundle.annotations {
-            try await send(annotation, in: bundle)
+            // Ask first. `QueuedTransport` retries whole bundles, so a send that
+            // created three issues and then lost the network would otherwise create
+            // the first three again.
+            if try await issueExists(for: annotation.id) { continue }
+
+            if annotation.tag != nil, labels == nil { labels = try await allLabels() }
+            try await file(annotation, in: bundle, labels: labels ?? [])
         }
     }
 
-    private func send(_ annotation: Annotation, in bundle: AnnotationBundle) async throws {
-        // Ask first. `QueuedTransport` retries whole bundles, so a send that created
-        // three issues and then lost the network would otherwise create the first
-        // three again.
-        if try await issueExists(for: annotation.id) { return }
-
+    private func file(_ annotation: Annotation,
+                      in bundle: AnnotationBundle,
+                      labels: [LinearLabel]) async throws {
         var assets = IssueDraft.Assets()
         assets.crop = try await upload(annotation.screenshotPNG,
                                        named: "\(annotation.id.uuidString).png")
         assets.context = try await upload(annotation.contextScreenshotPNG,
                                           named: "\(annotation.id.uuidString)-context.png")
 
-        let draft = IssueDraft(annotation: annotation, bundle: bundle, assets: assets)
+        let label = annotation.tag.flatMap {
+            LinearLabel.id(for: $0, in: labels, teamID: destination.teamID)
+        }
+        let draft = IssueDraft(annotation: annotation, bundle: bundle,
+                               assets: assets, labelID: label)
         try await create(draft)
     }
 
@@ -67,6 +78,18 @@ public final class LinearTransport: Transport, @unchecked Sendable {
                                      called: "the duplicate check")
         let issues = (data["issues"] as? [String: Any])?["nodes"] as? [[String: Any]]
         return !(issues ?? []).isEmpty
+    }
+
+    /// Every label this credential can see, team-scoped and workspace-scoped alike.
+    ///
+    /// Read whole rather than filtered by name, so the matching rule lives in Swift
+    /// where it is tested, rather than in a filter argument that only a real
+    /// workspace can prove. 250 is Linear's own page size; a workspace with more
+    /// labels than that would need paging, and nobody has one.
+    private func allLabels() async throws -> [LinearLabel] {
+        let query = "{ issueLabels(first: 250) { nodes { id name team { id } } } }"
+        return LinearLabel.list(from: try await graphQL(query, [:],
+                                                        called: "the label lookup"))
     }
 
     /// Returns the asset URL, or nil when there was no image to send.
@@ -134,6 +157,7 @@ public final class LinearTransport: Transport, @unchecked Sendable {
             "description": draft.description,
             "teamId": destination.teamID,
         ]
+        if let label = draft.labelID { input["labelIds"] = [label] }
         if let project = destination.projectID { input["projectId"] = project }
         if let delegate = destination.delegateID { input["delegateId"] = delegate }
 

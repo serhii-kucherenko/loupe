@@ -77,6 +77,18 @@ final class LinearRoundTripTests: XCTestCase {
         XCTAssertEqual(issue["title"] as? String, "the stock count is unreadable")
     }
 
+    /// The tag is the only field the person chose by hand, and `labelIds` is an
+    /// array of ids inside the mutation input - the one shape a `fetch` stub cannot
+    /// prove arrived intact.
+    func testTheTagArrivesAsALabelIdThroughARealRequest() async throws {
+        linear.labels = [["id": "label-bug", "name": "Bug"]]
+
+        try await transport().send(bundle(["the stock count is unreadable"]))
+
+        let issue = try XCTUnwrap(linear.created.first)
+        XCTAssertEqual(issue["labelIds"] as? [String], ["label-bug"])
+    }
+
     /// The header form is the difference between a request that works and a 401, and
     /// until now nothing had ever put it on an actual socket.
     func testAPersonalKeyArrivesBareAndATokenArrivesAsABearer() async throws {
