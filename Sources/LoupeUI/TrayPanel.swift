@@ -33,6 +33,14 @@ struct TrayPanel: View {
     var safeBottom: CGFloat = 0
 
     @FocusState private var sendFocused: Bool
+
+    /// Whether the failure reason is shown in full. It is capped at four lines
+    /// otherwise, because a server's answer can be long enough to push the Send
+    /// button off a drawer that does not scroll.
+    @State private var showsWholeReason = false
+    /// Whether the reason is on the pasteboard. Shown rather than announced, because
+    /// a copy that looks like it did nothing gets pressed again.
+    @State private var copiedReason = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let width: CGFloat = 340
@@ -138,20 +146,53 @@ struct TrayPanel: View {
             if case .failed(let why, let canRetry) = model.sendState {
                 // The person reading this is a developer looking at their own staging
                 // build. The real reason is more use to them than a soft sentence.
+                //
+                // Bounded, because it can now be a server's own words rather than a
+                // sentence Loupe wrote - a few hundred characters of JSON in a drawer
+                // this narrow pushes the Send button off the bottom, and there is
+                // nothing to scroll. Tap to see the rest.
                 Text(why)
                     .font(LoupeTheme.Typography.note)
                     .foregroundStyle(LoupeTheme.Colors.highlight.color)
+                    .lineLimit(showsWholeReason ? nil : 4)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showsWholeReason.toggle() }
                     .accessibilityLabel("Send failed: \(why)")
+                    .accessibilityHint(showsWholeReason ? "Shows less" : "Shows the whole reason")
 
-                // A failure nothing can retry needs a way to fix it, not a button
-                // that cannot work. Almost every one of these is "Linear is not set
-                // up yet", and the panel is where that is set up.
-                if !canRetry, let onSettings = model.onSettings {
-                    Button(action: onSettings) {
-                        Label("Open Linear settings", systemImage: "gearshape")
+                HStack(spacing: LoupeTheme.Space.sm) {
+                    // A failure nothing can retry needs a way to fix it, not a button
+                    // that cannot work. Almost every one of these is "Linear is not
+                    // set up yet", and the panel is where that is set up.
+                    if !canRetry, let onSettings = model.onSettings {
+                        Button(action: onSettings) {
+                            Label("Open Linear settings", systemImage: "gearshape")
+                        }
+                        .buttonStyle(LoupeButtonStyle(kind: .secondary))
                     }
-                    .buttonStyle(LoupeButtonStyle(kind: .secondary))
+
+                    // This message exists to be pasted - into an agent, an issue, a
+                    // message to whoever owns the workspace. Retyping a server's
+                    // answer off an iPad is how it turns back into "it said 400".
+                    if LoupeClipboard.isAvailable {
+                        Button {
+                            LoupeClipboard.copy(why)
+                            copiedReason = true
+                        } label: {
+                            Label(copiedReason ? "Copied" : "Copy reason",
+                                  systemImage: copiedReason ? "checkmark" : "doc.on.doc")
+                        }
+                        .buttonStyle(LoupeButtonStyle(kind: .quiet))
+                    }
+                }
+                // Both bits of state belong to this reason and not to the next one.
+                // A "Copied" tick still showing over a different failure says the
+                // wrong thing about what is on the pasteboard.
+                .onChange(of: why) { _ in
+                    copiedReason = false
+                    showsWholeReason = false
                 }
             }
 

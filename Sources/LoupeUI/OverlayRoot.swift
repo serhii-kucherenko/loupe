@@ -113,7 +113,6 @@ public struct OverlayRoot: View {
     /// tap does the same as the second, for anyone who tries neither.
     @ViewBuilder
     private func pull(in size: CGSize) -> some View {
-        let height = size.height
         VStack(spacing: 0) {
             // On the pull, not inside the drawer. The complaint was that nothing said
             // drag-select existed - and a control that only appears once you have
