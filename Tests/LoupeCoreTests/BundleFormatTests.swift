@@ -25,12 +25,20 @@ final class BundleFormatTests: XCTestCase {
 
         XCTAssertEqual(bundle.formatVersion, 1)
         XCTAssertEqual(bundle.app.platform, "iPadOS")
-        XCTAssertEqual(bundle.annotations.count, 2)
+        XCTAssertEqual(bundle.annotations.count, 3, "one of each kind")
         XCTAssertEqual(bundle.annotations[0].element.accessibilityID, "search.results.list")
         XCTAssertEqual(bundle.annotations[0].trace.last?.statusCode, 500)
         XCTAssertEqual(bundle.annotations[0].logs.first?.level, .error)
         XCTAssertEqual(bundle.annotations[0].viewport?.width, 1024)
         XCTAssertEqual(bundle.annotations[1].element.selector, "main > .cart > .empty-state")
+
+        // The drawn shape. It is in the example precisely so a consumer author reads
+        // one before writing code that assumes every element is a view.
+        let drawn = bundle.annotations[2].element
+        XCTAssertEqual(drawn.kind, .path)
+        XCTAssertEqual(drawn.path?.count, 8)
+        XCTAssertEqual(drawn.bounds, LoupePath.bounds(drawn.path ?? []),
+                       "bounds must actually be the shape's box, not a number typed in")
     }
 
     /// The rule the doc states plainly: adding a field is safe. Prove it against a
@@ -180,5 +188,66 @@ extension BundleFormatTests {
         XCTAssertNil(bundle.annotations[0].contextScreenshotPNG)
         XCTAssertEqual(bundle.annotations[0].element.selector, "main > .grid",
                        "the reference still carries the annotation")
+    }
+
+    // MARK: - A drawn shape, and everything that has never heard of one
+
+    /// The pair form is deliberate. A drawn shape is hundreds of points, and
+    /// `{"x":…,"y":…}` spends four times the bytes saying the same thing in a payload
+    /// that leaves a phone on whatever network is going.
+    func testAPathIsWrittenAsPlainPairs() throws {
+        let ref = ElementRef(kind: .path,
+                             bounds: Rect(x: 10, y: 20, width: 80, height: 60),
+                             path: [Point(x: 10, y: 20), Point(x: 90, y: 30),
+                                    Point(x: 50, y: 80)])
+        let written = String(decoding: try JSONEncoder().encode(ref), as: UTF8.self)
+
+        XCTAssertTrue(written.contains("[[10,20],[90,30],[50,80]]"), written)
+        // `bounds` legitimately writes `{"x":…}`; what must not appear is the object
+        // form *inside the path array*, which is the one that costs the bytes.
+        XCTAssertFalse(written.contains("[{"), "not a list of objects: \(written)")
+        XCTAssertTrue(written.contains("\"kind\":\"path\""), written)
+    }
+
+    func testAPathSurvivesTheRoundTrip() throws {
+        let drawn = [Point(x: 1, y: 2), Point(x: 3.5, y: 4.25), Point(x: 9, y: 0)]
+        let ref = ElementRef(kind: .path,
+                             bounds: LoupePath.bounds(drawn),
+                             path: drawn)
+        let back = try JSONDecoder().decode(
+            ElementRef.self, from: try JSONEncoder().encode(ref))
+
+        XCTAssertEqual(back.path, drawn)
+        XCTAssertEqual(back.kind, .path)
+        XCTAssertEqual(back.bounds, Rect(x: 1, y: 0, width: 8, height: 4.25))
+    }
+
+    /// The contract for every field added since v1: a consumer that has never heard
+    /// of a path gets the rectangle it would have got from a drag. A missing field
+    /// degrades quality, never correctness.
+    func testAReaderThatOnlyKnowsBoundsStillGetsAUsableRectangle() throws {
+        let json = """
+        {
+          "kind": "path",
+          "bounds": { "x": 40, "y": 60, "width": 120, "height": 90 },
+          "path": [[40,60],[160,70],[100,150]]
+        }
+        """.data(using: .utf8)!
+
+        let ref = try JSONDecoder().decode(ElementRef.self, from: json)
+        XCTAssertEqual(ref.bounds, Rect(x: 40, y: 60, width: 120, height: 90),
+                       "the crop rectangle is there whether or not you read the path")
+    }
+
+    /// Additive, the same discipline `region` followed. Every bundle written before
+    /// today still means what it meant.
+    func testAnElementWithNoPathIsUnchangedAndStillAView() throws {
+        let json = """
+        { "label": "Save", "bounds": { "x": 0, "y": 0, "width": 10, "height": 10 } }
+        """.data(using: .utf8)!
+
+        let ref = try JSONDecoder().decode(ElementRef.self, from: json)
+        XCTAssertEqual(ref.kind, .view)
+        XCTAssertNil(ref.path)
     }
 }

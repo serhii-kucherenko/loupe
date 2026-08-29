@@ -103,13 +103,14 @@ missing field degrades quality, never correctness.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `kind` | `"view"` \| `"region"` | What the annotation points at. Absent means `view`. |
+| `kind` | `"view"` \| `"region"` \| `"path"` | What the annotation points at. Absent means `view`. |
 | `accessibilityID` | string | What the app named the element. The strongest signal for finding it in source. |
 | `label` | string | Visible text or accessibility label. |
 | `className` | string | Runtime type, e.g. `ResultsCollectionView` or `div`. |
 | `selector` | string | CSS selector. **Web and Electron only**; Apple SDKs leave it out. |
 | `sourceFile` / `sourceLine` | string / integer | Only when the host opted in at the call site. |
-| `bounds` | rect | On-screen position, in `viewport` coordinates. |
+| `bounds` | rect | On-screen position, in `viewport` coordinates. For a `path`, the drawn shape's bounding box. |
+| `path` | array of `[x, y]` | The drawn shape. **`path` kind only.** |
 
 A rect is `{ "x", "y", "width", "height" }`, all numbers, origin top-left.
 
@@ -128,6 +129,41 @@ from a point over blank space. Rather than drop the note, the SDK captures a box
 around the point.
 
 Either way: read `bounds`, and let the crop and the context shot carry the rest.
+
+**A `kind` of `"path"` means the person drew a shape around several things.** It says
+the one thing a rectangle cannot: *these things, and not the things between them.*
+
+A box around two controls at opposite corners of a card includes everything in
+between and therefore means nothing. So does a box around a diagonal run of items in
+a grid. The shape is the answer to that.
+
+```json
+"element": {
+  "kind": "path",
+  "bounds": { "x": 40, "y": 60, "width": 120, "height": 90 },
+  "path": [[40, 60], [160, 70], [100, 150]]
+}
+```
+
+- **`[x, y]` pairs, not objects, and not SVG path data.** Both SDKs already produce
+  points and neither needs curves, so anything can render this with four lines. The
+  pair form matters at this size: a drawn shape is hundreds of points, and the object
+  form spends four times the bytes repeating `"x"` and `"y"` in a payload leaving a
+  phone on whatever network is going.
+- **Closed implicitly.** The last point joins the first. Fill it with the **even-odd**
+  rule - a hand-drawn shape crosses itself often, and even-odd is what a renderer
+  handed a bare point list does by default.
+- **Simplified before it is written** (Ramer-Douglas-Peucker, about 2 points of
+  tolerance). A finger emits a point per frame, so an unthinned shape around one card
+  is several hundred points that sit on top of each other.
+- **`bounds` is the bounding box, and it is still required.** That is the contract:
+  ignore `path` entirely and you get exactly the rectangle a drag would have given
+  you. A missing field degrades quality, never correctness.
+
+The crop PNG for a path is the bounding box with everything outside the shape masked
+out, composited onto the theme's paper colour - so the picture shows what was circled
+and not what was deliberately gone around. The context shot is the whole window with
+the shape stroked on it, the same as for the other two kinds.
 
 ### `trace[]`
 

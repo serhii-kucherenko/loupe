@@ -110,13 +110,14 @@ struct CommentPopover: View {
     private var title: String {
         switch pick.ref.kind {
         case .region: return "Region"
+        case .path: return "Shape"
         case .view: return pick.ref.label ?? pick.ref.accessibilityID ?? "Element"
         }
     }
 
     private var subtitle: String? {
         switch pick.ref.kind {
-        case .region:
+        case .region, .path:
             return "\(Int(pick.ref.bounds.width))×\(Int(pick.ref.bounds.height))"
         case .view:
             return pick.ref.accessibilityID ?? pick.ref.className
@@ -124,7 +125,11 @@ struct CommentPopover: View {
     }
 
     private var fallbackName: String {
-        pick.ref.kind == .region ? "the area you drew" : "the picked element"
+        switch pick.ref.kind {
+        case .region: return "the area you drew"
+        case .path: return "the shape you drew"
+        case .view: return "the picked element"
+        }
     }
 
     private var header: some View {
