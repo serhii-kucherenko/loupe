@@ -274,15 +274,34 @@ final class LinearSettingsFlowTests: XCTestCase {
                        LinearError.credentialRejected.description)
     }
 
+    /// With a Keychain that accepts the write, because the iOS simulator has none and
+    /// this test is about the destination rather than about storage.
     func testSaveStoresTheDestinationAndTreatsNoProjectAsNone() async {
         let store = settings()
-        let flow = LinearSettingsFlow(settings: store, makeDirectory: directory(Recorder()))
+        let flow = LinearSettingsFlow(settings: store,
+                                      makeDirectory: directory(Recorder()),
+                                      store: { _ in })
         await flow.test(key: "lin_api_abc")
 
         flow.projectID = ""
-        flow.save(key: "lin_api_abc")
+        XCTAssertTrue(flow.save(key: "lin_api_abc"))
 
         XCTAssertEqual(store.destination?.teamID, "t1")
         XCTAssertNil(store.destination?.projectID)
+    }
+
+    /// The order is deliberate and worth pinning down: the credential goes first, and
+    /// a destination is never written behind a credential that was refused. A team id
+    /// pointing at a workspace nothing can authenticate to is worse than nothing,
+    /// because the panel would reopen looking configured.
+    func testARefusedCredentialLeavesNoDestinationBehind() async {
+        let store = settings()
+        let flow = LinearSettingsFlow(settings: store,
+                                      makeDirectory: directory(Recorder()),
+                                      store: refuses)
+        await flow.test(key: "lin_api_abc")
+
+        XCTAssertFalse(flow.save(key: "lin_api_abc"))
+        XCTAssertNil(store.destination, "nothing is configured if the credential is not")
     }
 }
