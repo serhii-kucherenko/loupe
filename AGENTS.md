@@ -29,6 +29,22 @@ contract: additive changes only, no breaking renames without a major.
   depends on `LoupeUI`, never the reverse: a host that wants capture only takes
   `LoupeUI` and never compiles a line of Linear. The dependency that matters is the
   one that does not exist.
+- **`swift test` is the macOS suite only. Run the other two before pushing.** Both
+  have caught things nothing on this machine could:
+
+  ```sh
+  swift test -Xswiftc -swift-version -Xswiftc 6      # CI's Swift 6 job
+  xcodebuild test -scheme Loupe-Package \
+    -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro)' \
+    -skipPackagePluginValidation                      # CI's iOS job
+  ```
+
+  The iOS simulator **has no Keychain**, so every write and every delete is refused
+  with `errSecMissingEntitlement`. Any test that stores or clears a credential has to
+  skip on `LinearError.couldNotStore` - and note that a refusal is *not*
+  `errSecItemNotFound`, which is a mistake worth not making twice. Swift 6 mode
+  rejects things the package's declared Swift 5 accepts, including a nonisolated
+  `setUp` touching a `@MainActor` case's own properties.
 - **A failure that says nothing is the bug this project keeps having.** Six in one
   evening shared one shape: an operation that could fail, a result nobody was forced
   to read, and a product that carried on looking fine. A refused Keychain write. A

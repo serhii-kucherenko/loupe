@@ -33,8 +33,11 @@ final class LinearSettingsTests: XCTestCase {
         XCTAssertEqual(settings.credential(), .accessToken("oauth-token"))
     }
 
-    func testThereIsNoCredentialUntilOneIsSaved() throws {
-        try settings.clearCredential()
+    func testThereIsNoCredentialUntilOneIsSaved() {
+        // Best effort: this is setup, not the assertion. A Keychain with no
+        // entitlement refuses the delete outright - `errSecMissingEntitlement`, not
+        // "nothing to delete" - and there was nothing there to remove anyway.
+        try? settings.clearCredential()
         XCTAssertNil(settings.credential())
     }
 
@@ -42,15 +45,17 @@ final class LinearSettingsTests: XCTestCase {
         settings.destination = LinearDestination(teamID: "TEAM", projectID: "PROJ")
         try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
-        try settings.clearCredential()
+        // Here the delete *is* the thing under test, so a refusal skips rather than
+        // passes quietly.
+        try skipIfKeychainRefuses { try settings.clearCredential() }
 
         XCTAssertNil(settings.credential())
         XCTAssertEqual(settings.destination?.teamID, "TEAM")
     }
 
-    func testItRefusesToBuildATransportWithoutACredential() throws {
-        // Nothing to delete is success, so this is safe on a machine with no keychain.
-        try settings.clearCredential()
+    func testItRefusesToBuildATransportWithoutACredential() {
+        // Best effort, for the same reason: setup, and nothing was saved.
+        try? settings.clearCredential()
         XCTAssertThrowsError(try settings.transport()) { error in
             XCTAssertEqual(error as? LinearError, .notConfigured)
         }
