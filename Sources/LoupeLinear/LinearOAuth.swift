@@ -11,21 +11,42 @@ import AuthenticationServices
 /// ship a secret could not do OAuth honestly: anything in the binary is not a
 /// secret, and pretending otherwise is worse than an API key field.
 ///
-/// The scope is `read issues:create`, not `write`. Loupe files issues; it has no
-/// business being able to delete them.
+/// The scope is `read write`, and it was `issues:create` until Linear refused it.
 ///
-/// **`read` is explicit and not decoration.** Linear's own table calls it "(Default)
-/// … This scope will always be present", but Loupe's first call is a *read* -
-/// `issues(filter:)`, asked before every create so a retried bundle cannot file the
-/// same note twice - and a permission the SDK depends on should be requested by name
-/// rather than relied on as an implicit default. It also means the consent screen
-/// tells the truth about what Loupe does.
+/// `issues:create` is what Loupe actually needs, and Linear's table says it "allows
+/// creating new issues and their attachments". A real send with a token scoped that
+/// way comes back:
+///
+///     Invalid scope: 'write' required
+///
+/// A narrow scope that cannot file a single issue is not a safer default, it is a
+/// promise the library does not keep - and the person finds out at the moment they
+/// are trying to report something.
+///
+/// **This is a large grant and should not read as a small one.** `write` is write
+/// access to the whole account. Linear's consent screen says so, and whoever signs
+/// in sees it before agreeing. Anyone who would rather not grant it can paste a
+/// personal API key, which carries their own permissions and no scope at all; the
+/// panel offers both on purpose.
+///
+/// Serhii chose this deliberately, told the trade: "go with B".
+///
+/// **`read` stays explicit and is not decoration.** `write` may well imply it, and
+/// Linear's table calls `read` "(Default) … This scope will always be present" - but
+/// Loupe's first call is a *read*, `issues(filter:)`, asked before every create so a
+/// retried bundle cannot file the same note twice. A permission the SDK depends on
+/// is requested by name rather than relied upon.
+///
+/// Worth narrowing again once one send has actually landed: if the refused call was
+/// only ever the duplicate check, `read issues:create` would do, and that is a
+/// smaller thing to ask of somebody's workspace. Changing it costs one more sign-in,
+/// which is why it is not being guessed at now.
 public struct LinearOAuth: Sendable {
 
     public static let authorizeURL = URL(string: "https://linear.app/oauth/authorize")!
     public static let tokenURL = URL(string: "https://api.linear.app/oauth/token")!
     /// Space-separated, which is what RFC 6749 specifies and what Linear parses.
-    public static let scope = "read issues:create"
+    public static let scope = "read write"
 
     /// From the OAuth application someone registers in their own workspace. Public
     /// by design - a client id is not a credential.

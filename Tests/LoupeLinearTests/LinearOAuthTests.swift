@@ -43,14 +43,21 @@ final class LinearOAuthTests: XCTestCase {
         XCTAssertEqual(made.count, 50)
     }
 
-    func testTheAuthorizationURLAsksForOnlyWhatLoupeNeeds() {
+    /// The scope is a decision, not an implementation detail, so it is asserted
+    /// exactly. `issues:create` is what Loupe needs and Linear refuses it: a real
+    /// send with a token scoped that way answers "Invalid scope: 'write' required".
+    /// A default that cannot file one issue is not a safer default.
+    func testTheAuthorizationURLAsksForTheScopeLinearActuallyRequires() {
         let query = items(oauth.authorizationURL(proof: LinearOAuth.Proof(), state: "s"))
 
-        XCTAssertEqual(query["scope"], "read issues:create",
-                       "Loupe files issues; it has no business deleting them")
-        XCTAssertFalse(query["scope"]?.contains("write") ?? true,
-                       "write is account-wide, and filing an issue is not that")
-        XCTAssertFalse(query["scope"]?.contains("admin") ?? true)
+        XCTAssertEqual(query["scope"], "read write",
+                       "Linear refuses issues:create; a scope that files nothing is not safe")
+        // The guard that used to stand here refused `write` outright, and it was
+        // right to until Linear refused everything narrower. Replaced rather than
+        // deleted: the scope stays pinned to an exact string, so widening it further
+        // is a deliberate edit to this line and its reason, never a drift.
+        XCTAssertFalse(query["scope"]?.contains("admin") ?? true,
+                       "admin is never needed to file an issue, whatever else is")
         XCTAssertEqual(query["code_challenge_method"], "S256")
         XCTAssertEqual(query["response_type"], "code")
         XCTAssertNotNil(query["code_challenge"])
