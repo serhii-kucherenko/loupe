@@ -18,6 +18,14 @@ import LoupeCore
 public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedError,
                          RetryableError, Sendable {
     case notConfigured
+    /// A credential that works, and nowhere to send to.
+    ///
+    /// Its own case rather than `.notPermitted("no team chosen yet")`, which rendered
+    /// as "No permission for no team chosen yet" - not English, and it said
+    /// *permission* when the truth is *unconfigured*. The person read it as Linear
+    /// refusing them. Those want opposite actions: one is re-authorise, the other is
+    /// pick a team from a list already on screen.
+    case noDestination
     case credentialRejected
     case notPermitted(String)
     case rateLimited(retryAfter: TimeInterval?)
@@ -34,7 +42,9 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
     public var description: String {
         switch self {
         case .notConfigured:
-            return "No Linear credential yet. Open Loupe settings and add one."
+            return "No Linear credential yet. Open Linear settings and add one."
+        case .noDestination:
+            return "No team chosen yet. Open Linear settings and pick one."
         case .credentialRejected:
             return "Linear rejected the credential. Check the key, or sign in again."
         case .notPermitted(let what):
@@ -68,7 +78,8 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedErr
     public var isWorthRetrying: Bool {
         switch self {
         case .rateLimited, .unreachable: return true
-        case .notConfigured, .credentialRejected, .notPermitted, .api, .couldNotStore:
+        case .notConfigured, .noDestination, .credentialRejected, .notPermitted,
+             .api, .couldNotStore:
             return false
         }
     }

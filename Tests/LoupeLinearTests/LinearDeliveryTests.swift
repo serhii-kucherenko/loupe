@@ -67,7 +67,7 @@ final class LinearDeliveryTests: XCTestCase {
             XCTFail("expected a failure")
         } catch {
             XCTAssertEqual(error.localizedDescription,
-                           "No Linear credential yet. Open Loupe settings and add one.")
+                           "No Linear credential yet. Open Linear settings and add one.")
             XCTAssertFalse((error as? RetryableError)?.isWorthRetrying ?? true,
                            "sending it again cannot help - the settings panel can")
         }
@@ -85,7 +85,13 @@ final class LinearDeliveryTests: XCTestCase {
             try await LinearDelivery(keeping: local, settings: store).send(bundle())
             XCTFail("no team means nowhere to send")
         } catch {
-            XCTAssertEqual(error as? LinearError, .notPermitted("no team chosen yet"))
+            // Its own case, not `.notPermitted`. The old one rendered as "No
+            // permission for no team chosen yet", which said Linear had refused him
+            // when the truth was that nothing had been chosen - and those want
+            // opposite actions from the person reading it.
+            XCTAssertEqual(error as? LinearError, .noDestination)
+            XCTAssertEqual(error.localizedDescription,
+                           "No team chosen yet. Open Linear settings and pick one.")
             XCTAssertEqual(local.sent, 1)
         }
     }

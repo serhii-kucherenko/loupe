@@ -17,6 +17,7 @@ final class LinearErrorMessageTests: XCTestCase {
 
     private let every: [LinearError] = [
         .notConfigured,
+        .noDestination,
         .credentialRejected,
         .notPermitted("Core Team"),
         .rateLimited(retryAfter: 5),

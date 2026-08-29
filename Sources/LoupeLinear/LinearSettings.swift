@@ -87,9 +87,7 @@ public struct LinearSettings: @unchecked Sendable {
     public func transport(endpoint: URL = URL(string: "https://api.linear.app/graphql")!)
         throws -> LinearTransport {
         guard let credential = credential() else { throw LinearError.notConfigured }
-        guard let destination else {
-            throw LinearError.notPermitted("no team chosen yet")
-        }
+        guard let destination else { throw LinearError.noDestination }
         return LinearTransport(credential: credential,
                                destination: destination,
                                endpoint: endpoint)
