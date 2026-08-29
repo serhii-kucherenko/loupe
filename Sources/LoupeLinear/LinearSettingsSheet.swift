@@ -46,7 +46,12 @@ public struct LinearSettingsSheet: View {
             // has. That branch used to render whenever an OAuth application was
             // configured and never looked at the connection at all, so the loudest
             // thing on the panel contradicted the status line underneath it.
-            if isSignedIn {
+            if flow.isRestoring {
+                // Neither branch below is honest yet - the Keychain has not been
+                // read. Showing the ways in would say "signed out" to somebody who
+                // is signed in, which is what this used to do.
+                restoring
+            } else if isSignedIn {
                 signedIn
             } else {
                 if let oauth {
@@ -64,7 +69,9 @@ public struct LinearSettingsSheet: View {
                 credentialField
             }
 
-            status
+            if !flow.isRestoring {
+                status
+            }
 
             if !flow.teams.isEmpty {
                 // Where a note actually lands, in the order it narrows: workspace,
@@ -100,6 +107,19 @@ public struct LinearSettingsSheet: View {
         .frame(width: 360)
         .loupePanel()
         .task { await flow.load() }
+    }
+
+    /// The panel before it knows anything.
+    private var restoring: some View {
+        HStack(spacing: LoupeTheme.Space.sm) {
+            ProgressView()
+            Text("Checking Linear\u{2026}")
+                .font(LoupeTheme.Typography.note)
+                .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, LoupeTheme.Space.sm)
+        .accessibilityLabel("Checking Linear")
     }
 
     private var isSignedIn: Bool {

@@ -22,6 +22,19 @@ public final class LinearSettingsFlow: ObservableObject {
 
     @Published public private(set) var connection: Connection = .idle
 
+    /// Whether the panel has been to the Keychain yet.
+    ///
+    /// Separate from `connection`, because "I have not looked" and "I looked and
+    /// there is nothing" are different facts and the panel has to draw them
+    /// differently. They were the same value, so a panel opened by somebody already
+    /// signed in showed "Sign in with Linear" until the answer came back - telling
+    /// him he was signed out, in the moment he was least able to tell it was wrong.
+    ///
+    /// Not folded into `connection` as a case: a manual Test connection also passes
+    /// through `.testing`, and hiding the key field out from under somebody mid-test
+    /// would be its own bug.
+    @Published public private(set) var isRestoring = true
+
     /// The workspace the credential belongs to, and who it belongs to.
     ///
     /// The workspace is shown but never chosen. A Linear credential - personal key or
@@ -74,7 +87,18 @@ public final class LinearSettingsFlow: ObservableObject {
     public func load() async {
         teamID = settings.destination?.teamID ?? ""
         projectID = settings.destination?.projectID ?? ""
-        guard let saved = settings.credential() else { return }
+        let saved = settings.credential()
+
+        // Here, not after `connect`. The Keychain read is synchronous and instant;
+        // proving the credential is a network round trip. Holding the flag across
+        // both would show only a spinner to anybody offline or holding a stale
+        // credential - no key field to paste a new one into, and no message saying
+        // what is happening - for as long as the request took to give up.
+        isRestoring = false
+
+        guard let saved else { return }
+        // `connect` sets `.testing`, which the panel already draws as "Checking…",
+        // so the network stretch stays visible without hiding the way out of it.
         await connect(saved)
     }
 
