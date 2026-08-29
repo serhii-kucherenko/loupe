@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import LoupeCore
 
 #if canImport(UIKit)
@@ -323,6 +324,184 @@ public enum ElementPicker {
         guard let rep = content.bitmapImageRepForCachingDisplay(in: frame) else { return nil }
         content.cacheDisplay(in: frame, to: rep)
         return rep.representation(using: .png, properties: [:])
+        #endif
+    }
+
+    // MARK: - A drawn shape
+
+    /// The reference for a shape somebody drew.
+    ///
+    /// `bounds` is the shape's bounding box and stays required, so anything that has
+    /// never heard of a path gets exactly the rectangle a drag would have given it.
+    static func pathRef(_ points: [Point]) -> ElementRef {
+        ElementRef(kind: .path, bounds: LoupePath.bounds(points), path: points)
+    }
+
+    /// Everything a drawn shape produces.
+    ///
+    /// - Returns: nil when the gesture was not a shape at all - too few points, or a
+    ///   box smaller than a fingertip. The caller falls back to a tap-pick at the
+    ///   start point, which is what somebody who slipped almost certainly meant.
+    ///   Refusing outright would lose the gesture entirely.
+    @MainActor
+    public static func capture(path drawn: [CGPoint], in window: PlatformWindow)
+        -> (ref: ElementRef, screenshotPNG: Data?, contextScreenshotPNG: Data?)? {
+        let bounds = windowBounds(window)
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+
+        // Thinned once, here. The live stroke follows the raw points so it cannot
+        // feel laggy; what gets stored is the simplified shape, because a finger
+        // emits a point per frame and none of that detail survives being drawn.
+        let points = LoupePath.simplified(drawn.map { Point(x: $0.x, y: $0.y) })
+        guard LoupePath.isUsable(points) else { return nil }
+
+        let shape = LoupePath.bounds(points)
+        let box = CGRect(x: shape.x, y: shape.y, width: shape.width, height: shape.height)
+            .intersection(CGRect(origin: .zero, size: bounds.size))
+        guard box.width >= minimumRegionSize, box.height >= minimumRegionSize else {
+            return nil
+        }
+
+        let crop = regionPNG(box, in: window).flatMap {
+            masked($0, to: points, box: box)
+        }
+        return (pathRef(points), crop, contextPNG(ofPath: points, in: window))
+    }
+
+    /// The bounding-box crop with everything outside the shape replaced by
+    /// `loupe.cutaway`.
+    ///
+    /// This is the part that makes a drawn shape worth drawing. A crop of the
+    /// bounding box alone is a rectangle, which is the thing the person went out of
+    /// their way not to say - so the picture would contradict the gesture.
+    ///
+    /// Filled rather than left transparent. A PNG with an alpha channel reads as
+    /// broken on one viewer and as white on another, and neither of those says "this
+    /// was deliberately left out".
+    ///
+    /// Written against CoreGraphics rather than once per platform: masking an image
+    /// is the same operation on both, and the two copies would drift.
+    static func masked(_ png: Data, to points: [Point], box: CGRect) -> Data? {
+        guard let source = CGImageSourceCreateWithData(png as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              image.width > 0, image.height > 0,
+              box.width > 0, box.height > 0 else { return nil }
+
+        let width = image.width, height = image.height
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+
+        let whole = CGRect(x: 0, y: 0, width: width, height: height)
+        let ground = LoupeTheme.Colors.cutaway.value(dark: isDarkAppearance())
+        context.setFillColor(red: ground.red, green: ground.green,
+                             blue: ground.blue, alpha: ground.alpha)
+        context.fill(whole)
+
+        // The image is at device scale and the points are in window points, so the
+        // shape has to be scaled to match. `y` flips because a bitmap context counts
+        // up from the bottom and every rectangle this picker deals in counts down
+        // from the top.
+        let scaleX = Double(width) / box.width
+        let scaleY = Double(height) / box.height
+        let shape = CGMutablePath()
+        for (index, point) in points.enumerated() {
+            let x = (point.x - box.minX) * scaleX
+            let y = Double(height) - (point.y - box.minY) * scaleY
+            if index == 0 { shape.move(to: CGPoint(x: x, y: y)) }
+            else { shape.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        shape.closeSubpath()
+
+        context.addPath(shape)
+        // Even-odd, matching what the format documents. A hand-drawn shape crosses
+        // itself constantly and winding would fill the crossings solid.
+        context.clip(using: .evenOdd)
+        context.draw(image, in: whole)
+
+        guard let masked = context.makeImage() else { return nil }
+        let out = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            out, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, masked, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return out as Data
+    }
+
+    /// The whole window with the drawn shape stroked on it.
+    ///
+    /// The same job the outlined rectangle does for the other two kinds: the tight
+    /// crop says what, and this says where.
+    @MainActor
+    public static func contextPNG(ofPath points: [Point], in window: PlatformWindow) -> Data? {
+        #if canImport(UIKit)
+        guard let root = window.rootViewController?.view ?? window.subviews.first,
+              root.bounds.width > 0, root.bounds.height > 0 else { return nil }
+
+        let renderer = UIGraphicsImageRenderer(bounds: root.bounds)
+        return renderer.image { context in
+            root.drawHierarchy(in: root.bounds, afterScreenUpdates: true)
+            stroke(points.map { CGPoint(x: $0.x, y: $0.y) }, in: context.cgContext)
+        }.pngData()
+
+        #elseif canImport(AppKit)
+        guard let content = window.contentView,
+              content.bounds.width > 0, content.bounds.height > 0,
+              let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds)
+        else { return nil }
+
+        content.cacheDisplay(in: content.bounds, to: rep)
+
+        // Flipped back to AppKit's bottom-left, the same conversion the rectangle
+        // version does one corner at a time.
+        let height = content.bounds.height
+        let flipped = points.map { CGPoint(x: $0.x, y: height - $0.y) }
+
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        stroke(flipped, in: context.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
+
+        return rep.representation(using: .png, properties: [:])
+        #endif
+    }
+
+    /// The committed shape: solid, closed, in `loupe.highlight`.
+    ///
+    /// Solid on purpose. Dashed means "you are still drawing this" everywhere else in
+    /// the overlay, and a picture is the one place that distinction cannot be
+    /// explained afterwards.
+    private static func stroke(_ points: [CGPoint], in context: CGContext) {
+        guard points.count >= 2 else { return }
+        let colour = LoupeTheme.Colors.highlight.light
+        context.setStrokeColor(red: colour.red, green: colour.green,
+                               blue: colour.blue, alpha: 1)
+        context.setLineWidth(LoupeTheme.Stroke.highlight)
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+        context.beginPath()
+        context.move(to: points[0])
+        for point in points.dropFirst() { context.addLine(to: point) }
+        context.closePath()
+        context.strokePath()
+    }
+
+    /// Which end of every colour token to use when drawing into a file.
+    ///
+    /// The crop is a picture of the app, so it should sit on the ground the app is
+    /// using. A light cutaway around dark content looks like a printing error.
+    static func isDarkAppearance() -> Bool {
+        #if canImport(UIKit)
+        return UITraitCollection.current.userInterfaceStyle == .dark
+        #elseif canImport(AppKit)
+        return NSApp?.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        #else
+        return false
         #endif
     }
 

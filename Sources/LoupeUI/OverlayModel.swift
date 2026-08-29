@@ -27,6 +27,14 @@ public final class OverlayModel: ObservableObject {
     /// until the drag ends.
     @Published public private(set) var dragRegion: Rect?
 
+    /// The shape being drawn right now, in window points.
+    ///
+    /// Separate from `dragRegion` rather than a shared "whatever is in progress",
+    /// because they are drawn differently and only one can be true at a time. Two
+    /// fields make the second fact impossible to get wrong; one field with a mode
+    /// beside it does not.
+    @Published public private(set) var dragPath: [Point]?
+
     /// What is typed into the open comment popover.
     ///
     /// On the model rather than in the popover's own `@State`, because an outside
@@ -153,6 +161,18 @@ public final class OverlayModel: ObservableObject {
     public func drag(to rect: Rect?) {
         guard mode.swallowsInput else { return }
         dragRegion = rect
+        dragPath = nil
+    }
+
+    /// The person is drawing a shape. Feedback only, same contract as `drag(to:)`.
+    ///
+    /// Not thinned on the way in. The dashed stroke has to follow the finger exactly
+    /// or the gesture feels like it is lagging; simplification happens once, on
+    /// release, where its only job is to keep the bundle small.
+    public func draw(to points: [Point]?) {
+        guard mode.swallowsInput else { return }
+        dragPath = points
+        dragRegion = nil
     }
 
     /// The person clicked an element. Pins it and opens the popover.
@@ -163,7 +183,15 @@ public final class OverlayModel: ObservableObject {
         // The control follows the gesture, never the other way round. Someone who
         // drags a box while Point is lit has just told us which tool they meant, and
         // refusing the pick to defend a segmented control would be absurd.
-        tool = ref.kind == .region ? .box : .point
+        switch ref.kind {
+        case .region: tool = .box
+        case .path: tool = .draw
+        case .view:
+            // A tap under Draw is the way out of it, and it has to actually be the
+            // way out: leaving Draw lit after a tap-pick would put the next drag
+            // back into a shape nobody asked for.
+            tool = .point
+        }
         draftComment = ""
         draftTag = nil
         set(.commenting(PendingPick(ref: ref, screenshotPNG: screenshotPNG,
@@ -295,6 +323,7 @@ public final class OverlayModel: ObservableObject {
         // Any change of mode ends a drag. `drag(to:)` never comes through here, so
         // this cannot wipe the rectangle out from under the gesture that owns it.
         dragRegion = nil
+        dragPath = nil
         mode = new
         onModeChange?(new)
     }

@@ -45,6 +45,7 @@ final class TokenManifestTests: XCTestCase {
             "ink.soft": LoupeTheme.Colors.inkSoft,
             "line": LoupeTheme.Colors.line,
             "action": LoupeTheme.Colors.action,
+            "cutaway": LoupeTheme.Colors.cutaway,
             "scrim": LoupeTheme.Colors.scrim,
             "scrim.modal": LoupeTheme.Colors.scrimModal,
         ]

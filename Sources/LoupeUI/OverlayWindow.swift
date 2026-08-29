@@ -90,6 +90,12 @@ public final class OverlayHost {
     /// The window is fixed at mouse-down rather than resolved per event: a rectangle
     /// dragged half off a sheet should still be a rectangle on that sheet.
     private var dragOrigin: (window: NSWindow, point: CGPoint)?
+    /// Every point of a stroke as it happens, unthinned.
+    ///
+    /// Raw on purpose: the dashed line has to sit exactly under the pointer or the
+    /// gesture feels like it is lagging. Thinning happens once, on release, where its
+    /// only job is the bundle's size.
+    private var drawn: [CGPoint] = []
 
     /// Width of the strip the tray needs, panel padding included.
     private var trayStripWidth: CGFloat { TrayPanel.width + LoupeTheme.Space.lg * 2 }
@@ -200,6 +206,7 @@ public final class OverlayHost {
                 }
 
                 self.dragOrigin = target
+                self.drawn = self.model.tool.locksTheDrag ? [target.point] : []
                 return true
             }
             return consumed ? nil : event
@@ -209,7 +216,12 @@ public final class OverlayHost {
             let consumed = MainActor.assumeIsolated { () -> Bool in
                 guard let self, let origin = self.dragOrigin,
                       let now = self.target, now.window === origin.window else { return false }
-                self.model.drag(to: Rect(Self.box(origin.point, now.point)))
+                guard self.model.tool.locksTheDrag else {
+                    self.model.drag(to: Rect(Self.box(origin.point, now.point)))
+                    return true
+                }
+                self.drawn.append(now.point)
+                self.model.draw(to: self.drawn.map { Point(x: $0.x, y: $0.y) })
                 return true
             }
             return consumed ? nil : event
@@ -234,10 +246,26 @@ public final class OverlayHost {
     /// A press that barely moved is a click on an element; one that swept out a
     /// rectangle is a region. `capture(rect:in:)` decides which, by refusing
     /// anything under `minimumRegionSize`.
+    ///
+    /// With Draw lit the same press is a shape instead, and the same rule applies one
+    /// level up: a stroke too small to be a shape falls back to a click. That is what
+    /// makes Draw safe to be stuck in - a tap always still picks.
     private func finishDrag(from origin: (window: NSWindow, point: CGPoint)) {
         let end = target?.window === origin.window ? target?.point : nil
-        let rect = Self.box(origin.point, end ?? origin.point)
+        let stroke = drawn
+        drawn = []
 
+        if model.tool.locksTheDrag, !stroke.isEmpty {
+            if let shot = ElementPicker.capture(path: stroke + [end ?? origin.point],
+                                                in: origin.window) {
+                deliver(shot, from: origin.window)
+            } else {
+                pick(at: origin.point, in: origin.window)
+            }
+            return
+        }
+
+        let rect = Self.box(origin.point, end ?? origin.point)
         if let shot = ElementPicker.capture(rect: rect, in: origin.window) {
             deliver(shot, from: origin.window)
         } else {
@@ -459,6 +487,27 @@ public final class OverlayHost {
             else { return }
             model.resolveDraftAndResumePicking()
             deliver(ElementPicker.capture(rect: rect, in: target), to: model, from: target)
+        }, onDraw: { [weak model, weak scene] drawn in
+            guard let model, let scene, let anchor = drawn.first else { return }
+            // The shape's own centre, for the same reason the rectangle uses its
+            // centre: a lasso drawn over a dialog should find the dialog's window,
+            // and the first point of a stroke very often sits outside it.
+            let box = LoupePath.bounds(drawn.map { Point(x: $0.x, y: $0.y) })
+            let middle = CGPoint(x: box.x + box.width / 2, y: box.y + box.height / 2)
+            guard let target = WindowFinder.topmost(in: scene, excluding: overlayWindow,
+                                                    at: middle)
+            else { return }
+            model.resolveDraftAndResumePicking()
+
+            // A stroke too small to be a shape is a tap that slipped, and it becomes
+            // the tap it was going to be. Refusing would lose the gesture entirely
+            // and teach nothing about why.
+            if let shape = ElementPicker.capture(path: drawn, in: target) {
+                deliver(shape, to: model, from: target)
+            } else {
+                deliver(ElementPicker.capture(at: anchor, in: target), to: model,
+                        from: target)
+            }
         }, window: window)
 
         let controller = UIHostingController(rootView: content.ignoresSafeArea())
@@ -544,6 +593,7 @@ private struct OverlayRootWithPill: View {
     @ObservedObject var model: OverlayModel
     var onTap: (CGPoint) -> Void
     var onDrag: (CGRect) -> Void
+    var onDraw: ([CGPoint]) -> Void
     /// The overlay's own window, for turning the keyboard's screen frame into an
     /// inset. Weak-ish by construction: the view is rebuilt, never stored.
     weak var window: UIWindow?
@@ -551,6 +601,12 @@ private struct OverlayRootWithPill: View {
     @State private var safeArea = EdgeInsets()
     @State private var keyboardInset: CGFloat = 0
     @State private var dragOrigin: CGPoint?
+    /// Every point of the stroke as it happens, unthinned.
+    ///
+    /// Raw on purpose: the dashed line has to sit exactly under the finger or the
+    /// gesture feels like it is lagging. Thinning happens once, in
+    /// `ElementPicker.capture(path:in:)`, where its only job is the bundle's size.
+    @State private var drawn: [CGPoint] = []
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -572,17 +628,36 @@ private struct OverlayRootWithPill: View {
                     // A drag draws a region; a tap still picks an element. The
                     // minimum distance is what keeps them apart - without it a tap
                     // that moves two points becomes a rectangle nobody meant.
+                    // Draw needs to register from the first millimetre, or the top
+                    // of every stroke is missing; Box needs a threshold, or a tap
+                    // that moves two points becomes a rectangle nobody meant. Same
+                    // gesture, two different questions, so the distance is the tool's.
                     .gesture(
-                        DragGesture(minimumDistance: ElementPicker.minimumRegionSize)
+                        DragGesture(minimumDistance: model.tool.locksTheDrag
+                                    ? 1 : ElementPicker.minimumRegionSize)
                             .onChanged { value in
                                 let origin = dragOrigin ?? value.startLocation
                                 dragOrigin = origin
-                                model.drag(to: Rect(box(origin, value.location)))
+                                guard model.tool.locksTheDrag else {
+                                    model.drag(to: Rect(box(origin, value.location)))
+                                    return
+                                }
+                                if drawn.isEmpty { drawn.append(value.startLocation) }
+                                drawn.append(value.location)
+                                model.draw(to: drawn.map { Point(x: $0.x, y: $0.y) })
                             }
                             .onEnded { value in
                                 let origin = dragOrigin ?? value.startLocation
                                 dragOrigin = nil
-                                onDrag(box(origin, value.location))
+                                guard model.tool.locksTheDrag else {
+                                    onDrag(box(origin, value.location))
+                                    return
+                                }
+                                var stroke = drawn
+                                if stroke.isEmpty { stroke = [value.startLocation] }
+                                stroke.append(value.location)
+                                drawn = []
+                                onDraw(stroke)
                             }
                     )
             }

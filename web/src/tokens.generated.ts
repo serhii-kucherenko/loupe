@@ -45,6 +45,12 @@ export const tokens = {
       "lightAlpha": 1,
       "darkAlpha": 1
     },
+    "cutaway": {
+      "light": "#E8EDEA",
+      "dark": "#1E2823",
+      "lightAlpha": 1,
+      "darkAlpha": 1
+    },
     "scrim": {
       "light": "#17211C",
       "dark": "#000000",

@@ -362,10 +362,13 @@ public struct OverlayRoot: View {
         if let dragged = model.dragRegion {
             DragRegionLayer(rect: rect(dragged))
         }
+        if let drawn = model.dragPath, drawn.count >= 2 {
+            DrawPathLayer(points: drawn)
+        }
 
         switch model.mode {
         case .picking(let hovered):
-            if model.dragRegion == nil, let hovered {
+            if model.dragRegion == nil, model.dragPath == nil, let hovered {
                 HighlightLayer(rect: rect(hovered.bounds),
                                badge: model.annotations.count + 1,
                                isPinned: false)
@@ -373,8 +376,9 @@ public struct OverlayRoot: View {
         case .commenting(let pick):
             // The pinned pick stays visible while a new shape is drawn over it, so
             // the previous note does not simply vanish mid-gesture.
-            HighlightLayer(rect: rect(pick.ref.bounds), badge: pick.index, isPinned: true)
-                .opacity(model.dragRegion == nil ? 1 : 0.35)
+            HighlightLayer(rect: rect(pick.ref.bounds), badge: pick.index,
+                           isPinned: true, path: pick.ref.path)
+                .opacity(model.dragRegion == nil && model.dragPath == nil ? 1 : 0.35)
         case .off, .browsing:
             EmptyView()
         }
