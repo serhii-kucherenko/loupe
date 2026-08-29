@@ -62,8 +62,8 @@ final class EndToEndTests: XCTestCase {
         XCTAssertEqual(picked.ref.accessibilityID, "search.results")
 
         model.pick(picked.ref,
-                   screenshotPNG: ElementPicker.screenshotPNG(of: picked.view),
-                   contextScreenshotPNG: ElementPicker.contextPNG(of: picked.view, in: window),
+                   screenshotPNG: await ElementPicker.screenshotPNG(of: picked.view),
+                   contextScreenshotPNG: await ElementPicker.contextPNG(of: picked.view, in: window),
                    screen: window.title,
                    viewport: Rect(x: 0, y: 0, width: 600, height: 400))
         model.saveComment("clearing the search leaves the old results on screen", tag: .bug)

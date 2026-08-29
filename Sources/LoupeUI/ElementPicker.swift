@@ -1,5 +1,6 @@
 import Foundation
 import LoupeCore
+import WebKit
 
 #if canImport(UIKit)
 import UIKit
@@ -132,20 +133,156 @@ public enum ElementPicker {
     /// what is around it", which is a different question - so both are kept rather
     /// than one being padded until it half-answers both.
     @MainActor
-    public static func screenshotPNG(of view: PlatformView) -> Data? {
-        #if canImport(UIKit)
+    public static func screenshotPNG(of view: PlatformView) async -> Data? {
         guard view.bounds.width > 0, view.bounds.height > 0 else { return nil }
+        let web = await webContent(in: view)
+
+        #if canImport(UIKit)
         let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
-        let image = renderer.image { _ in
+        return renderer.image { context in
             view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
-        }
-        return image.pngData()
+            draw(web, over: view, in: context.cgContext)
+        }.pngData()
+
         #elseif canImport(AppKit)
-        guard view.bounds.width > 0, view.bounds.height > 0,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
         view.cacheDisplay(in: view.bounds, to: rep)
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        draw(web, over: view, in: context.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:])
         #endif
+    }
+
+    // MARK: - Content this process cannot draw
+
+    /// One web view and the pixels WebKit says it is showing.
+    struct WebShot {
+        let view: WKWebView
+        /// nil when WebKit could not or would not answer.
+        let image: CGImage?
+    }
+
+    /// **`drawHierarchy` cannot see a `WKWebView`.**
+    ///
+    /// Web content is rendered in a separate process and handed to the compositor, so
+    /// a hierarchy draw contains everything *this* process knows how to draw and
+    /// nothing else. What lands in the picture is whatever was last composited into
+    /// our own layers - which, on a screen somebody has just navigated to, is the
+    /// screen they came from. Annotating inside a book produced a picture of the
+    /// shelf, and nothing about the picture said so.
+    ///
+    /// A picture of the wrong screen is worse than no picture: it is confidently
+    /// wrong, and whoever reads the ticket has no way to tell.
+    ///
+    /// `takeSnapshot` is the only API that asks WebKit for its current pixels, and it
+    /// is asynchronous - which is why every capture path here is now `async`. That is
+    /// the whole reason for the signature change.
+    ///
+    /// - Note: web views are the reported case and the common one, but they are not
+    ///   the only out-of-process content. A `MapKit` view, an `AVPlayerLayer` and
+    ///   anything backed by Metal all composite the same way and will all come back
+    ///   stale. There is no general API for those; if one turns up in a host app, it
+    ///   needs the same treatment as this and a way to ask it for its pixels.
+    @MainActor
+    static func webContent(in view: PlatformView) async -> [WebShot] {
+        var found: [WKWebView] = []
+        func walk(_ candidate: PlatformView) {
+            if let web = candidate as? WKWebView { found.append(web) }
+            for child in candidate.subviews { walk(child) }
+        }
+        walk(view)
+        guard !found.isEmpty else { return [] }
+
+        var shots: [WebShot] = []
+        for web in found {
+            shots.append(WebShot(view: web, image: await snapshot(web)))
+        }
+        return shots
+    }
+
+    @MainActor
+    private static func snapshot(_ web: WKWebView) async -> CGImage? {
+        guard web.bounds.width > 0, web.bounds.height > 0 else { return nil }
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = web.bounds
+        configuration.afterScreenUpdates = true
+
+        return await withCheckedContinuation { continuation in
+            web.takeSnapshot(with: configuration) { image, _ in
+                #if canImport(UIKit)
+                continuation.resume(returning: image?.cgImage)
+                #elseif canImport(AppKit)
+                continuation.resume(returning:
+                    image?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+                #endif
+            }
+        }
+    }
+
+    /// Which end of every colour token to use when drawing into a file.
+    ///
+    /// A crop is a picture of the app, so it should sit on the ground the app is
+    /// using. A light fill in the middle of a dark screenshot looks like a printing
+    /// error rather than a deliberate gap.
+    @MainActor
+    static func isDarkAppearance() -> Bool {
+        #if canImport(UIKit)
+        return UITraitCollection.current.userInterfaceStyle == .dark
+        #elseif canImport(AppKit)
+        return NSApp?.effectiveAppearance
+            .bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        #else
+        return false
+        #endif
+    }
+
+    /// Paints each web view's real pixels over the hole the hierarchy draw left.
+    ///
+    /// **A web view WebKit would not answer for is filled with `loupe.cutaway`, not
+    /// left as it was.** Left as it was means the stale frame underneath, which is
+    /// the whole bug. A flat rectangle is visibly not content: the picture says "not
+    /// captured here" instead of quietly showing the wrong screen, and the rest of
+    /// the shot survives - which matters when the web view is a banner and the note
+    /// is about something else entirely.
+    @MainActor
+    private static func draw(_ shots: [WebShot],
+                             over view: PlatformView,
+                             in context: CGContext) {
+        guard !shots.isEmpty else { return }
+        let ground = LoupeTheme.Colors.cutaway.value(dark: isDarkAppearance())
+
+        for shot in shots {
+            let frame = shot.view.convert(shot.view.bounds, to: view)
+            guard frame.width > 0, frame.height > 0 else { continue }
+
+            context.saveGState()
+            #if canImport(UIKit)
+            // UIKit's graphics context counts down from the top; CoreGraphics draws
+            // an image up from the bottom, so without this flip the web content
+            // arrives upside down inside an otherwise correct picture.
+            context.translateBy(x: frame.minX, y: frame.maxY)
+            context.scaleBy(x: 1, y: -1)
+            let box = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
+            #else
+            let flipped = view.isFlipped
+                ? CGRect(x: frame.minX, y: view.bounds.height - frame.maxY,
+                         width: frame.width, height: frame.height)
+                : frame
+            let box = flipped
+            #endif
+
+            if let image = shot.image {
+                context.draw(image, in: box)
+            } else {
+                context.setFillColor(red: ground.red, green: ground.green,
+                                     blue: ground.blue, alpha: 1)
+                context.fill(box)
+            }
+            context.restoreGState()
+        }
     }
 
     // MARK: - When there is no element
@@ -195,7 +332,7 @@ public enum ElementPicker {
     /// - Parameter rect: top-left origin, in window points, like every other
     ///   rectangle the picker deals in. Clipped to the window.
     @MainActor
-    public static func capture(rect: CGRect, in window: PlatformWindow)
+    public static func capture(rect: CGRect, in window: PlatformWindow) async
         -> (ref: ElementRef, screenshotPNG: Data?, contextScreenshotPNG: Data?)? {
         let bounds = windowBounds(window)
         guard bounds.width > 0, bounds.height > 0 else { return nil }
@@ -204,7 +341,9 @@ public enum ElementPicker {
             .intersection(CGRect(origin: .zero, size: bounds.size))
         guard box.width >= minimumRegionSize, box.height >= minimumRegionSize else { return nil }
 
-        return (regionRef(box), regionPNG(box, in: window), contextPNG(ofRegion: box, in: window))
+        return (regionRef(box),
+                await regionPNG(box, in: window),
+                await contextPNG(ofRegion: box, in: window))
     }
 
     /// The box a region pick covers: centred on the point, clipped to the window.
@@ -228,16 +367,18 @@ public enum ElementPicker {
     /// element. Every capture path goes through here so the fallback cannot be
     /// wired into one platform and forgotten in another.
     @MainActor
-    public static func capture(at point: CGPoint, in window: PlatformWindow)
+    public static func capture(at point: CGPoint, in window: PlatformWindow) async
         -> (ref: ElementRef, screenshotPNG: Data?, contextScreenshotPNG: Data?)? {
         if let picked = pick(at: point, in: window) {
             return (picked.ref,
-                    screenshotPNG(of: picked.view),
-                    contextPNG(of: picked.view, in: window))
+                    await screenshotPNG(of: picked.view),
+                    await contextPNG(of: picked.view, in: window))
         }
         guard let box = regionBox(at: point, in: window),
               let ref = regionRef(at: point, in: window) else { return nil }
-        return (ref, regionPNG(box, in: window), contextPNG(ofRegion: box, in: window))
+        return (ref,
+                await regionPNG(box, in: window),
+                await contextPNG(ofRegion: box, in: window))
     }
 
     /// What the highlight should follow, element or region.
@@ -253,8 +394,8 @@ public enum ElementPicker {
     /// reasoning about a layout problem needs exactly that. The outline is what makes
     /// the shot usable: without it, a full window is just a screenshot again.
     @MainActor
-    public static func contextPNG(of view: PlatformView, in window: PlatformWindow) -> Data? {
-        contextPNG(ofRegion: boundsInWindow(view, window), in: window)
+    public static func contextPNG(of view: PlatformView, in window: PlatformWindow) async -> Data? {
+        await contextPNG(ofRegion: boundsInWindow(view, window), in: window)
     }
 
     /// The same shot for a plain rectangle, which is what a region pick has instead
@@ -263,7 +404,7 @@ public enum ElementPicker {
     /// - Parameter box: top-left origin, in window points, like everything else the
     ///   picker hands out. The flip back to AppKit's bottom-left happens here.
     @MainActor
-    public static func contextPNG(ofRegion box: CGRect, in window: PlatformWindow) -> Data? {
+    public static func contextPNG(ofRegion box: CGRect, in window: PlatformWindow) async -> Data? {
         #if canImport(UIKit)
         guard let root = window.rootViewController?.view ?? window.subviews.first,
               root.bounds.width > 0, root.bounds.height > 0 else { return nil }
@@ -300,7 +441,7 @@ public enum ElementPicker {
 
     /// Just the box, cropped out of the window.
     @MainActor
-    static func regionPNG(_ box: CGRect, in window: PlatformWindow) -> Data? {
+    static func regionPNG(_ box: CGRect, in window: PlatformWindow) async -> Data? {
         #if canImport(UIKit)
         guard let root = window.rootViewController?.view ?? window.subviews.first,
               root.bounds.width > 0, root.bounds.height > 0 else { return nil }

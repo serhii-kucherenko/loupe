@@ -81,6 +81,11 @@ public enum Loupe {
     /// a host driving Loupe itself, without the overlay.
     ///
     /// - Parameter point: top-left origin, in viewport points, on every platform.
+    ///
+    /// Asynchronous, and that is a deliberate break for anybody calling it: a
+    /// `WKWebView` renders out of process, and the only way to get its real pixels is
+    /// to ask WebKit and wait. The alternative was a picture of the previous screen,
+    /// which is worse than no picture because nothing about it says it is wrong.
     @discardableResult
     public static func capture(
         at point: CGPoint,
@@ -88,9 +93,9 @@ public enum Loupe {
         comment: String,
         tag: AnnotationTag? = nil,
         screen: String? = nil
-    ) -> Annotation? {
+    ) async -> Annotation? {
         guard let session,
-              let shot = ElementPicker.capture(at: point, in: window) else { return nil }
+              let shot = await ElementPicker.capture(at: point, in: window) else { return nil }
 
         let annotation = Annotation(
             comment: comment,
