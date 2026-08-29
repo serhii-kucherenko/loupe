@@ -15,13 +15,62 @@ import LoupeUI
 /// A flat red page rather than real prose, because what is being checked is which
 /// pixels come back, and one colour answers that with no ambiguity.
 struct ReaderScreen: View {
+    @State private var isOpen = false
+
     var body: some View {
         VStack(spacing: 0) {
+            Button("Open the book") { isOpen = true }
+                .padding(24)
             WebPage()
                 .accessibilityIdentifier("reader.page")
             CaptureReadout()
         }
+        // **Presented, not pushed.** This is the shape that broke: a view controller
+        // presented over the root is not inside the root's view, so a capture that
+        // drew `rootViewController.view` drew the screen underneath. Somebody
+        // annotated a page in a book and got a picture of their library.
+        .fullScreenCover(isPresented: $isOpen) {
+            OpenBook(close: { isOpen = false })
+        }
     }
+}
+
+/// The page somebody is actually looking at when they annotate.
+private struct OpenBook: View {
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("Close the book", action: close)
+                Spacer()
+                Text("Chapter one").accessibilityIdentifier("book.chapter")
+            }
+            .padding(16)
+
+            // Flat and unmistakable: if the capture shows anything else, it is not
+            // this screen.
+            Color(red: 0, green: 0, blue: 1)
+                .accessibilityIdentifier("book.page")
+
+            WindowFinderProbe()
+                .frame(width: 0, height: 0)
+            CaptureReadout(label: "book")
+        }
+    }
+}
+
+/// Hands the readout the window it is actually inside.
+private struct WindowFinderProbe: UIViewRepresentable {
+    final class Probe: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            CaptureReadout.hostWindow = window
+        }
+    }
+
+    func makeUIView(context: Context) -> Probe { Probe() }
+    func updateUIView(_ view: Probe, context: Context) {}
 }
 
 private struct WebPage: UIViewRepresentable {
@@ -44,70 +93,41 @@ private struct WebPage: UIViewRepresentable {
 /// for real and says what colour came back. That keeps the assertion on the pixels
 /// rather than on something standing in for them.
 private struct CaptureReadout: View {
+    var label = "reader"
     @MainActor static weak var web: WKWebView?
+    @MainActor static weak var hostWindow: UIWindow?
     @State private var result = "not captured"
 
     var body: some View {
         Text(result)
             .font(.caption)
-            .accessibilityIdentifier("reader.capture")
+            .accessibilityIdentifier("\(label).capture")
             .padding(8)
             .task {
                 guard CommandLine.arguments.contains("--capture-readout") else { return }
-                guard let web = Self.web else { return }
-
-                // Let the red page paint and let the host composite it.
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-                // Then change the page and capture straight away. This is meant to be
-                // the reported case in miniature: WebKit has repainted in its own
-                // process and nothing has composited it into ours yet.
-                //
-                // **It does not reproduce the bug, and the readout is here to show
-                // that rather than to hide it.** On this simulator all three routes
-                // return the *old* colour while JavaScript reports the new one - so
-                // `takeSnapshot` is no fresher than `drawHierarchy` here, and this
-                // screen cannot yet tell a fixed capture from a broken one. Whatever
-                // Readium does differently is what SER-718 is actually about.
-                var said = "?"
-                do {
-                    let answer = try await web.evaluateJavaScript("""
-                    (function () {
-                      document.body.style.background = '#00ff00';
-                      return getComputedStyle(document.body).backgroundColor;
-                    })()
-                    """)
-                    said = "\(answer ?? "nil")"
-                } catch {
-                    // Reported, not swallowed. An assignment evaluates to `undefined`,
-                    // which WebKit refuses to bridge, so the call throws even when the
-                    // script ran - and a `try?` here hid whether the page had changed
-                    // at all, which is the one thing this readout exists to say.
-                    said = "threw: \(error.localizedDescription)"
-                }
-                try? await Task.sleep(nanoseconds: 600_000_000)
-
-                // Both routes side by side, so which one is stale is a reading rather
-                // than a guess.
-                let hierarchy = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in
-                    web.drawHierarchy(in: web.bounds, afterScreenUpdates: true)
-                }.pngData()
-
-                let configuration = WKSnapshotConfiguration()
-                configuration.rect = web.bounds
-                configuration.afterScreenUpdates = true
-                let snapshot: Data? = await withCheckedContinuation { continuation in
-                    web.takeSnapshot(with: configuration) { image, _ in
-                        continuation.resume(returning: image?.pngData())
-                    }
-                }
-
-                let png = await ElementPicker.screenshotPNG(of: web)
-                result = "crop \(Self.middle(of: png))"
-                    + " | hierarchy \(Self.middle(of: hierarchy))"
-                    + " | snapshot \(Self.middle(of: snapshot))"
-                    + " | js \(said)"
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                result = label == "book" ? await Self.fromTheWindow() : await Self.fromTheWeb()
             }
+    }
+
+    /// The context shot, which is meant to be the whole window - and used to be the
+    /// root view controller's view, which does not contain anything presented over
+    /// it. This is the reported bug: capture inside a presented screen and get the
+    /// screen underneath.
+    @MainActor
+    static func fromTheWindow() async -> String {
+        guard let window = hostWindow else { return "no window" }
+        let box = CGRect(x: window.bounds.midX - 40, y: window.bounds.midY - 40,
+                         width: 80, height: 80)
+        let png = await ElementPicker.contextPNG(ofRegion: box, in: window)
+        return "context \(middle(of: png))"
+    }
+
+    @MainActor
+    static func fromTheWeb() async -> String {
+        guard let web = web else { return "no web view" }
+        let png = await ElementPicker.screenshotPNG(of: web)
+        return "crop \(middle(of: png))"
     }
 
     /// The colour in the middle of the picture, as `r,g,b`.

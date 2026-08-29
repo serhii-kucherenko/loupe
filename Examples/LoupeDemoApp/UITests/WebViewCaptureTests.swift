@@ -27,28 +27,43 @@ final class WebViewCaptureTests: XCTestCase {
         app.launch()
     }
 
-    /// **This test currently fails, and it is committed failing on purpose.**
+    /// **SER-718, reproduced.** The Reco session read it off a real bundle: annotate
+    /// a page inside an open book and the context shot is the library, with the
+    /// highlight over empty space below the last row of covers.
     ///
-    /// The reader paints red, waits until everything agrees, turns green, and is
-    /// captured immediately. Green would mean the capture asked WebKit; red means it
-    /// returned the frame from before the change.
+    /// It is not a web view problem, which is where two nights of theory went. The
+    /// hit test asks `window.hitTest` and sees the presented screen; the render drew
+    /// `window.rootViewController.view`, which does not contain a view controller
+    /// presented over it. So the walk and the render disagreed about which screen was
+    /// on screen, and only the render was wrong.
     ///
-    /// It comes back red *with* the `takeSnapshot` fix in place, and the readout says
-    /// why: JavaScript reports `rgb(0, 255, 0)` while `drawHierarchy`, `takeSnapshot`
-    /// and Loupe's own capture all report red. So on this simulator asking WebKit is
-    /// no fresher than not asking it, and this screen cannot yet tell a fixed capture
-    /// from a broken one.
+    /// Here the book is a `fullScreenCover` over the reader, and its page is flat
+    /// blue. If the capture comes back anything else, it is the screen underneath.
+    func testCapturingInsideAPresentedScreenGetsThatScreen() {
+        app.buttons["Reader"].tap()
+        app.buttons["Open the book"].tap()
+        XCTAssertTrue(app.staticTexts["book.chapter"].waitForExistence(timeout: 5),
+                      "the book has to actually be open")
+
+        let readout = app.staticTexts["book.capture"]
+        XCTAssertTrue(readout.waitForExistence(timeout: 5))
+        let done = NSPredicate(format: "label BEGINSWITH 'context '")
+        expectation(for: done, evaluatedWith: readout)
+        waitForExpectations(timeout: 20)
+
+        let label = readout.label
+        XCTAssertTrue(label.contains("0,0,255") || label.contains("0,0,254"),
+                      "the picture is the screen underneath, not the one being read "
+                      + "- got \(label)")
+    }
+
+    /// The web view case, kept and skipped.
     ///
-    /// That means **SER-718 is not reproduced here.** Whatever Readium does
-    /// differently - a real EPUB, paginated, in a web view it manages - is what the
-    /// bug is actually about, and the next step is to annotate inside a real book
-    /// rather than to keep refining a red page.
-    ///
-    /// Left in the suite rather than deleted because a failing test that names what
-    /// is not yet understood is worth more than a green one that proves nothing. The
-    /// first version of this passed without the fix; the version before that failed
-    /// in a harness with no render server. Both felt like evidence.
+    /// A flat red page cannot tell a fixed capture from a broken one: change it and
+    /// capture at once and `drawHierarchy`, `takeSnapshot` and Loupe's own capture all
+    /// return the old colour while JavaScript reports the new one. That is a real
+    /// thing worth understanding, and it is not what SER-718 was.
     func testCapturingAWebViewGetsTheWebViewsCurrentPixels() throws {
-        throw XCTSkip("SER-718 is not reproduced by a flat red page - see the note above")
+        throw XCTSkip("a flat page cannot tell a fixed capture from a broken one")
     }
 }

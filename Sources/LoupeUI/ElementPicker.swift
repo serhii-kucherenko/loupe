@@ -186,6 +186,30 @@ public enum ElementPicker {
     ///   anything backed by Metal all composite the same way and will all come back
     ///   stale. There is no general API for those; if one turns up in a host app, it
     ///   needs the same treatment as this and a way to ask it for its pixels.
+    /// The screen somebody is actually looking at, inside a window.
+    ///
+    /// A view controller presented over another does not remove it - the one
+    /// underneath stays in the window with all its views. So "every web view in this
+    /// window" includes web views on screens nobody can see, and painting their
+    /// pixels on top puts a hidden screen over the visible one. That is exactly what
+    /// happened the first time this was fixed: drawing the window got the right
+    /// screen, and the composite pass then painted the covered one back over it.
+    ///
+    /// Follows the presentation chain to the end, which is the same answer UIKit
+    /// gives when it decides what to show.
+    @MainActor
+    static func topmostContent(in window: PlatformWindow) -> PlatformView {
+        #if canImport(UIKit)
+        var controller = window.rootViewController
+        while let presented = controller?.presentedViewController {
+            controller = presented
+        }
+        return controller?.view ?? window
+        #elseif canImport(AppKit)
+        return window.contentView ?? PlatformView()
+        #endif
+    }
+
     @MainActor
     static func webContent(in view: PlatformView) async -> [WebShot] {
         var found: [WKWebView] = []
@@ -403,17 +427,31 @@ public enum ElementPicker {
     ///
     /// - Parameter box: top-left origin, in window points, like everything else the
     ///   picker hands out. The flip back to AppKit's bottom-left happens here.
+    /// **The window, not its root view controller's view.**
+    ///
+    /// A view controller presented modally is not a subview of the root's view - UIKit
+    /// puts it in its own container beside it. So drawing the root drew whatever the
+    /// *root* is showing, which on an app that presents a reader over a shelf is the
+    /// shelf. Somebody annotated a page in a book and the picture in the ticket was
+    /// their library, with the highlight over empty space below the last row.
+    ///
+    /// The hit test never had this problem: it asks `window.hitTest`, which sees
+    /// presented content. So the walk and the render disagreed about which screen was
+    /// on the screen, and only the render was wrong.
+    ///
+    /// A `UIWindow` is a `UIView`, so this needs no conversion either - the box is
+    /// already in window coordinates, which is what every rectangle here is in.
     @MainActor
     public static func contextPNG(ofRegion box: CGRect, in window: PlatformWindow) async -> Data? {
         #if canImport(UIKit)
-        guard let root = window.rootViewController?.view ?? window.subviews.first,
-              root.bounds.width > 0, root.bounds.height > 0 else { return nil }
-        let frame = root.convert(box, from: nil)
+        guard window.bounds.width > 0, window.bounds.height > 0 else { return nil }
+        let web = await webContent(in: topmostContent(in: window))
 
-        let renderer = UIGraphicsImageRenderer(bounds: root.bounds)
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
         return renderer.image { context in
-            root.drawHierarchy(in: root.bounds, afterScreenUpdates: true)
-            outline(frame, in: context.cgContext)
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            draw(web, over: window, in: context.cgContext)
+            outline(box, in: context.cgContext)
         }.pngData()
 
         #elseif canImport(AppKit)
@@ -440,21 +478,27 @@ public enum ElementPicker {
     }
 
     /// Just the box, cropped out of the window.
+    /// The window again, for the same reason as `contextPNG(ofRegion:in:)`: a
+    /// presented view controller is not inside the root's view, so a crop taken from
+    /// the root is a crop of the screen underneath the one somebody is looking at.
     @MainActor
     static func regionPNG(_ box: CGRect, in window: PlatformWindow) async -> Data? {
         #if canImport(UIKit)
-        guard let root = window.rootViewController?.view ?? window.subviews.first,
-              root.bounds.width > 0, root.bounds.height > 0 else { return nil }
-        let frame = root.convert(box, from: nil)
+        guard window.bounds.width > 0, window.bounds.height > 0 else { return nil }
+        let web = await webContent(in: topmostContent(in: window))
 
-        let renderer = UIGraphicsImageRenderer(size: frame.size)
-        return renderer.image { _ in
-            // Draw the whole root shifted so the box lands at the origin. Cropping
+        let renderer = UIGraphicsImageRenderer(size: box.size)
+        return renderer.image { context in
+            // Draw the whole window shifted so the box lands at the origin. Cropping
             // the finished image would work too and cost a second full-size bitmap.
-            root.drawHierarchy(in: CGRect(x: -frame.origin.x, y: -frame.origin.y,
-                                          width: root.bounds.width,
-                                          height: root.bounds.height),
-                               afterScreenUpdates: true)
+            let shifted = CGRect(x: -box.origin.x, y: -box.origin.y,
+                                 width: window.bounds.width, height: window.bounds.height)
+            window.drawHierarchy(in: shifted, afterScreenUpdates: true)
+
+            context.cgContext.saveGState()
+            context.cgContext.translateBy(x: -box.origin.x, y: -box.origin.y)
+            draw(web, over: window, in: context.cgContext)
+            context.cgContext.restoreGState()
         }.pngData()
 
         #elseif canImport(AppKit)
