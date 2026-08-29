@@ -98,8 +98,25 @@ public final class QueuedTransport: Transport, @unchecked Sendable {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    /// Drops a bundle that has been sent.
+    ///
+    /// A delete that fails is not cosmetic: the bundle stays in the queue, so it is
+    /// sent again on the next drain, and `pendingCount` never comes down - the tray
+    /// says "waiting to send" for ever about something that already arrived. Linear
+    /// survives that because a repeat send is a no-op, but an ordinary `HTTPTransport`
+    /// would receive it again every time.
+    ///
+    /// Still not thrown: the send genuinely succeeded, and failing it afterwards
+    /// would be a worse lie than the one being fixed. It is loud in a debug build,
+    /// which is all this SDK ever ships in.
     private func remove(_ file: URL) {
         lock.lock(); defer { lock.unlock() }
-        try? FileManager.default.removeItem(at: file)
+        do {
+            try FileManager.default.removeItem(at: file)
+        } catch {
+            assertionFailure("Loupe sent \(file.lastPathComponent) but could not "
+                             + "remove it from the queue, so it will be sent again: "
+                             + "\(error.localizedDescription)")
+        }
     }
 }

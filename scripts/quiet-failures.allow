@@ -1,0 +1,23 @@
+# Every place something is allowed to fail without saying so, and why.
+#
+# Format: <path>	<the source line>	<the argument>
+# Tabs between the three. Matched on the text of the line, not its number, so
+# moving code does not silently re-allow it and editing it does not either.
+#
+# The reason is the point. If you cannot write one, that is the finding.
+
+Sources/LoupeCore/AnnotationSession.swift	guard let file, let data = try? Data(contentsOf: file) else { return }	No saved tray is the ordinary case - a first run, or a tray already sent. Nothing has failed.
+Sources/LoupeCore/AnnotationSession.swift	guard let saved = try? decoder.decode(SavedTray.self, from: data) else {	A file that will not decode is somebody's unsent notes, so it is left alone rather than overwritten - but the branch asserts, so it is not quiet.
+Sources/LoupeCore/QueuedTransport.swift	try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))	Sleep only throws on cancellation, and a cancelled retry should stop retrying. There is no failure here to report.
+Sources/LoupeCore/QueuedTransport.swift	let found = (try? FileManager.default.contentsOfDirectory(	A queue directory that does not exist yet holds nothing waiting, which is exactly what an empty list means.
+Sources/LoupeCore/Transport.swift	let base = (try? FileManager.default.url(	Falls back to a documented default directory. The host is told where bundles go either way.
+Sources/LoupeLinear/LinearDelivery.swift	guard let linear = try? settings.transport(endpoint: endpoint) else { return }	Not being configured for Linear is not a failure. Annotating works from the first launch and delivery switches itself on when a credential exists.
+Sources/LoupeLinear/LinearDirectory.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {	Throws a LinearError on the next line. The `try?` only chooses which error, never whether there is one.
+Sources/LoupeLinear/LinearOAuth.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],	Same: the guard's else branch throws. Nothing is swallowed.
+Sources/LoupeLinear/LinearTransport.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {	Same: the guard's else branch throws.
+Sources/LoupeLinear/LoupeLinear.swift	(try? settings.transport()) != nil	The `try?` is the question. `isConfigured` asks whether building a transport would work, so the failure is the answer rather than something hidden.
+
+Sources/LoupeUI/Loupe.swift	public static func attach(to window: PlatformWindow) -> Bool {	Most hosts have nothing useful to do with a failure, but it is not silent: attaching before `start` trips an assertion, because an overlay that never appears with no explanation is the hardest bug to find in this SDK.
+Sources/LoupeLinear/LinearSettingsFlow.swift	public func refresh() async -> Bool {	False means only "there is no credential to refresh with yet", which is not a failure and has nothing to report.
+Sources/LoupeLinear/LinearSettingsFlow.swift	public func signOut() -> Bool {	The one caller checks it, and on false `connection` carries the reason. Discardable because a host calling this from its own menu has nowhere to show it.
+Sources/LoupeLinear/LinearSettingsFlow.swift	public func save(key: String) -> Bool {	The panel must not close on false, and it does not. `connection` carries the reason either way.

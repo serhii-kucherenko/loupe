@@ -163,6 +163,20 @@ jobs:
             -destination "id=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
+  # Nothing to build, so it answers in seconds and on a Linux runner.
+  quiet-failures:
+    name: No new way to fail quietly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Six bugs in one evening shared one shape: something that could fail, a
+      # result nobody was forced to read, and a product that carried on looking
+      # fine. One of them left sign-in *working* while quietly turning the PKCE
+      # verifier into a constant - a failure with no symptom, which using the
+      # product can never find. A sweep finds today's six; this catches the
+      # seventh.
+      - run: python3 scripts/check-quiet-failures.py
+
   web:
     name: Build and test (web)
     runs-on: ubuntu-latest

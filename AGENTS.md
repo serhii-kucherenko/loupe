@@ -29,6 +29,18 @@ contract: additive changes only, no breaking renames without a major.
   depends on `LoupeUI`, never the reverse: a host that wants capture only takes
   `LoupeUI` and never compiles a line of Linear. The dependency that matters is the
   one that does not exist.
+- **A failure that says nothing is the bug this project keeps having.** Six in one
+  evening shared one shape: an operation that could fail, a result nobody was forced
+  to read, and a product that carried on looking fine. A refused Keychain write. A
+  discarded `session.start()`, which hung sign-in forever. A `try?` that turned a
+  dropped request into "the project was deleted". And a discarded `SecRandomCopyBytes`
+  that left sign-in *working* while making the PKCE verifier a constant - **a failure
+  with no symptom at all**, which running the product can never find, unlike every
+  other bug on this project. `try?` and `@discardableResult` are ergonomic features:
+  they exist to let you skip a decision, so they collect exactly where somebody did
+  not want to make one. `scripts/check-quiet-failures.py` runs in CI and fails on a
+  new one; `scripts/quiet-failures.allow` holds every argued-for case with its reason.
+  Writing the reason is the check - if you cannot, that is the finding.
 - A credential belongs in the Keychain and nowhere else. There is a test asserting it
   never reaches `UserDefaults`; keep it passing. **A refused write is an error somebody
   must see, never a `Bool` that gets discarded** - `save(_:)` throws
