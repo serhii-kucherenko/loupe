@@ -263,7 +263,7 @@ public final class OverlayModel: ObservableObject {
             set(.off)
         } catch {
             pendingCount = queue?.pendingCount ?? 0
-            sendState = .failed(message(for: error))
+            sendState = .failed(message(for: error), canRetry: canRetry(error))
             // The tray is where the failure is readable and where Try again lives,
             // so a failed send always ends up there, wherever it started from.
             set(.browsing)
@@ -280,7 +280,7 @@ public final class OverlayModel: ObservableObject {
             sendState = .idle
         } catch {
             pendingCount = queue.pendingCount
-            sendState = .failed(message(for: error))
+            sendState = .failed(message(for: error), canRetry: canRetry(error))
         }
     }
 
@@ -303,6 +303,18 @@ public final class OverlayModel: ObservableObject {
     /// the real reason is more use to them than a reassuring sentence.
     private func message(for error: Error) -> String {
         if case LoupeError.transportFailed(let why) = error { return why }
-        return (error as NSError).localizedDescription
+        // `localizedDescription` directly, not through an `NSError` bridge. Both work
+        // now that `LinearError` conforms to `LocalizedError`, but the bridge is what
+        // produced "LinearError error 3" on the first real send, and there is no
+        // reason to keep depending on it.
+        return error.localizedDescription
+    }
+
+    /// Whether "Try again" is honest advice for this failure.
+    ///
+    /// Anything that does not say is assumed retryable: "send it again" is the right
+    /// default for a transport whose errors say nothing about themselves.
+    private func canRetry(_ error: Error) -> Bool {
+        (error as? RetryableError)?.isWorthRetrying ?? true
     }
 }

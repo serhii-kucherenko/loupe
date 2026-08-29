@@ -54,7 +54,9 @@ public enum OverlayMode: Equatable, Sendable {
 public enum SendState: Equatable, Sendable {
     case idle
     case sending
-    case failed(String)
+    /// Why it failed, and whether pressing the button again could possibly help.
+    /// A "Try again" on a rejected credential is confidently wrong advice.
+    case failed(String, canRetry: Bool)
     /// How many annotations went out. Shown briefly, then the overlay closes.
     case sent(Int)
 }

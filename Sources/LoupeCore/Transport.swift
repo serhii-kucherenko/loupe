@@ -1,6 +1,21 @@
 import Foundation
 
 /// Where a sent bundle goes. Triage sits on the other side of this.
+/// An error that knows whether pressing the button again could possibly help.
+///
+/// The tray offers "Try again" on any failure, which is confidently wrong advice
+/// for most of them: a rejected credential will be rejected again, and a request
+/// Linear refused outright will be refused again. A retry that cannot work wastes
+/// somebody's time and teaches them the button is a lie.
+///
+/// A protocol rather than a case on `SendState`, so `LoupeCore` never has to learn
+/// what any particular tracker's failures are. Anything not conforming is assumed
+/// worth retrying, because "send it again" is the right default for a transport
+/// whose errors say nothing about themselves.
+public protocol RetryableError: Error {
+    var isWorthRetrying: Bool { get }
+}
+
 public protocol Transport: Sendable {
     func send(_ bundle: AnnotationBundle) async throws
 }

@@ -4,8 +4,11 @@ import LoupeCore
 
 final class SpyTransport: Transport, @unchecked Sendable {
     var shouldFail = false
+    /// A specific error to throw, when the test is about which error it is.
+    var failure: Error?
     var sent: [AnnotationBundle] = []
     func send(_ bundle: AnnotationBundle) async throws {
+        if let failure { throw failure }
         if shouldFail { throw LoupeError.transportFailed("triage returned 503") }
         sent.append(bundle)
     }
@@ -147,7 +150,9 @@ final class OverlayModeTests: XCTestCase {
 
         await model.send()
 
-        XCTAssertEqual(model.sendState, .failed("triage returned 503"))
+        // Retryable, because a transport whose errors say nothing about themselves
+        // gets the benefit of the doubt: "send it again" is the right default.
+        XCTAssertEqual(model.sendState, .failed("triage returned 503", canRetry: true))
         XCTAssertEqual(model.annotations.count, 1, "nothing is lost on a failure")
         XCTAssertEqual(model.mode, .browsing, "the overlay stays so it can be retried")
     }
@@ -235,6 +240,42 @@ final class OverlayModeTests: XCTestCase {
         XCTAssertEqual(model.pendingCount, 0)
         XCTAssertEqual(model.sendState, .idle)
     }
+
+    // MARK: - "Try again" has to be honest
+
+    /// A failure that cannot be retried must not offer a retry. The tray offered one
+    /// on every failure, which for a rejected credential is confidently wrong advice.
+    func testAFailureThatCannotSucceedDoesNotOfferARetry() async {
+        let model = makeModel()
+        transport.failure = Refusing()
+        model.beginAnnotating()
+        model.pick(ref("a")); model.saveComment("one", tag: .bug)
+
+        await model.send()
+
+        guard case .failed(let why, let canRetry) = model.sendState else {
+            return XCTFail("expected a failure, got \(model.sendState)")
+        }
+        XCTAssertFalse(canRetry)
+        XCTAssertEqual(why, "there is no point trying this again")
+    }
+
+    /// An error that says nothing about itself keeps the retry, because that is the
+    /// right default for a transport whose failures are opaque.
+    func testAnOpaqueFailureStillOffersARetry() async {
+        let model = makeModel()
+        transport.failure = Vague()
+        model.beginAnnotating()
+        model.pick(ref("a")); model.saveComment("one", tag: .bug)
+
+        await model.send()
+
+        guard case .failed(_, let canRetry) = model.sendState else {
+            return XCTFail("expected a failure")
+        }
+        XCTAssertTrue(canRetry)
+    }
+
 }
 
 /// The tray must never be the reason part of the app cannot be pointed at.
@@ -377,3 +418,17 @@ final class DragPreviewTests: XCTestCase {
         XCTAssertNil(model.dragRegion)
     }
 }
+
+/// Says plainly that retrying is pointless.
+///
+/// `LocalizedError` as well, and that is not incidental: writing this without it
+/// reproduced the exact bug under repair - an `errorDescription` that nothing reads,
+/// and "error 1" on screen instead of the sentence. Declaring a message is not the
+/// same as conforming to the protocol that delivers it.
+private struct Refusing: RetryableError, LocalizedError {
+    var isWorthRetrying: Bool { false }
+    var errorDescription: String? { "there is no point trying this again" }
+}
+
+/// Says nothing about itself, like most errors.
+private struct Vague: Error {}

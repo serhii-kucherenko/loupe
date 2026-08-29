@@ -1,11 +1,22 @@
 import Foundation
+import LoupeCore
 
 /// What went wrong, in terms someone can act on.
 ///
 /// "Send failed" alone sends people to the wrong fix. A rejected key, a team you
 /// have no rights to and a flat network are three different problems with three
 /// different next steps, and only one of them is worth retrying.
-public enum LinearError: Error, Equatable, CustomStringConvertible, Sendable {
+/// - Note: `LocalizedError` as well as `CustomStringConvertible`, and that is not
+///   belt and braces. A bare Swift enum bridged to `NSError` reports
+///   `"The operation couldn't be completed. (LoupeLinear.LinearError error 3.)"` -
+///   which is exactly what the first person to try a real send saw, in place of a
+///   sentence saying what Linear had actually said. Every `description` here is
+///   written to be read by somebody who has to do something about it, and
+///   `localizedDescription` is what most of Apple's frameworks and most host code
+///   will reach for. Conforming here fixes it everywhere at once, including the
+///   places nobody has looked.
+public enum LinearError: Error, Equatable, CustomStringConvertible, LocalizedError,
+                         RetryableError, Sendable {
     case notConfigured
     case credentialRejected
     case notPermitted(String)
@@ -49,6 +60,8 @@ public enum LinearError: Error, Equatable, CustomStringConvertible, Sendable {
             return "The Keychain refused to store the credential (OSStatus \(status))."
         }
     }
+
+    public var errorDescription: String? { description }
 
     /// Whether leaving it in the queue could plausibly help. A rejected key will be
     /// rejected again; a flat network will not be flat forever.

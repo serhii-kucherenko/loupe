@@ -131,7 +131,7 @@ struct TrayPanel: View {
                 .buttonStyle(LoupeButtonStyle(kind: .quiet))
             }
 
-            if case .failed(let why) = model.sendState {
+            if case .failed(let why, _) = model.sendState {
                 // The person reading this is a developer looking at their own staging
                 // build. The real reason is more use to them than a soft sentence.
                 Text(why)
@@ -157,16 +157,26 @@ struct TrayPanel: View {
             }
             .buttonStyle(LoupeButtonStyle(kind: .primary, isFocused: sendFocused))
             .focused($sendFocused)
-            .disabled(model.annotations.isEmpty || model.sendState == .sending)
+            .disabled(model.annotations.isEmpty || model.sendState == .sending || !canSend)
             .frame(maxWidth: .infinity)
         }
         .padding(LoupeTheme.Space.md)
     }
 
+    /// A failure nothing can retry leaves the button off, so the only thing on screen
+    /// worth doing is reading the message and fixing what it names.
+    private var canSend: Bool {
+        if case .failed(_, let canRetry) = model.sendState { return canRetry }
+        return true
+    }
+
     private var sendTitle: String {
         switch model.sendState {
         case .sending: return "Sending"
-        case .failed: return "Try again"
+        // "Try again" only when trying again could work. A rejected credential will
+        // be rejected again, and a button that cannot succeed teaches somebody it is
+        // a lie. The message above it already says what to do instead.
+        case .failed(_, let canRetry): return canRetry ? "Try again" : "Send failed"
         case .sent(let n): return "Sent \(n)"
         case .idle: return model.annotations.count == 1 ? "Send 1 note" : "Send \(model.annotations.count) notes"
         }
