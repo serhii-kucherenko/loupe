@@ -82,5 +82,71 @@ final class ContextShotTests: XCTestCase {
         empty.contentView = NSView(frame: .zero)
         XCTAssertNil(ElementPicker.contextPNG(of: empty.contentView!, in: empty))
     }
+
+    /// The same job for a drawn shape: the crop says what was circled, and this says
+    /// where on the screen it was. Stroked as the shape, not as its bounding box -
+    /// a rectangle here would be the picture contradicting the gesture.
+    func testTheDrawnShapeIsStrokedInTheContextShot() throws {
+        let (window, _) = window()
+        // A triangle over the card, in top-left coordinates like every rectangle the
+        // picker deals in.
+        let drawn = [Point(x: 40, y: 60), Point(x: 160, y: 60), Point(x: 100, y: 100)]
+
+        guard let data = ElementPicker.contextPNG(ofPath: drawn, in: window),
+              let source = NSBitmapImageRep(data: data) else {
+            return XCTFail("no context shot")
+        }
+
+        // The top edge of the triangle runs from x=40 to x=160 at y=60. Somewhere
+        // along it there must be highlight-coloured pixels on a white window.
+        let highlight = LoupeTheme.Colors.highlight.value(dark: false)
+        var found = 0
+        for x in 50...150 {
+            for y in 57...63 {
+                guard let pixel = source.colorAt(
+                    x: Int(Double(x) * Double(source.pixelsWide) / 400),
+                    y: Int(Double(y) * Double(source.pixelsHigh) / 300)) else { continue }
+                if abs(Double(pixel.redComponent) - highlight.red) < 0.15,
+                   abs(Double(pixel.greenComponent) - highlight.green) < 0.15,
+                   abs(Double(pixel.blueComponent) - highlight.blue) < 0.15 {
+                    found += 1
+                }
+            }
+        }
+        XCTAssertGreaterThan(found, 10, "the shape is not drawn, so the shot says nothing")
+    }
+
+    /// And it must be the *shape*. A stroked bounding box would put a line along the
+    /// bottom edge, where this triangle has only its apex.
+    func testTheContextShotStrokesTheShapeRatherThanItsBox() throws {
+        let (window, _) = window()
+        let drawn = [Point(x: 40, y: 60), Point(x: 160, y: 60), Point(x: 100, y: 100)]
+
+        guard let data = ElementPicker.contextPNG(ofPath: drawn, in: window),
+              let source = NSBitmapImageRep(data: data) else {
+            return XCTFail("no context shot")
+        }
+
+        let highlight = LoupeTheme.Colors.highlight.value(dark: false)
+        var onTheBottomEdge = 0
+        // The bounding box's bottom edge is y=100, from x=40 to x=160. The triangle
+        // touches it only at x=100, so the corners must be clean.
+        for x in 45...70 {
+            for y in 97...103 {
+                guard let pixel = source.colorAt(
+                    x: Int(Double(x) * Double(source.pixelsWide) / 400),
+                    y: Int(Double(y) * Double(source.pixelsHigh) / 300)) else { continue }
+                if abs(Double(pixel.redComponent) - highlight.red) < 0.15,
+                   abs(Double(pixel.greenComponent) - highlight.green) < 0.15,
+                   abs(Double(pixel.blueComponent) - highlight.blue) < 0.15 {
+                    onTheBottomEdge += 1
+                }
+            }
+        }
+        XCTAssertEqual(onTheBottomEdge, 0,
+                       "a line along the box's bottom edge means the box was drawn, "
+                       + "which is the one thing the gesture said it was not")
+    }
 }
+
 #endif
