@@ -259,6 +259,54 @@ final class LinearSettingsFlowTests: XCTestCase {
         XCTAssertFalse(LinearError.couldNotStore(errSecMissingEntitlement).isWorthRetrying)
     }
 
+    // MARK: - Seeing a project that was made in Linear
+
+    /// Loupe cannot create projects on purpose, so this is the only way a new one
+    /// arrives: make it in Linear, press Refresh, and it is in the picker.
+    func testRefreshPicksUpAProjectMadeInLinear() async {
+        let recorder = Recorder()
+        let flow = LinearSettingsFlow(settings: settings(),
+                                      makeDirectory: directory(recorder),
+                                      store: { _ in })
+        await flow.test(key: "lin_api_abc")
+        XCTAssertEqual(flow.projects.map(\.name), ["Loupe"])
+
+        // Somebody makes one in the browser.
+        recorder.projects.append(("p2", "Reco"))
+
+        let refreshed = await flow.refresh()
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(flow.projects.map(\.name), ["Loupe", "Reco"])
+    }
+
+    /// Refreshing must not quietly move where notes go.
+    func testRefreshKeepsTheChosenTeamAndProject() async {
+        let flow = LinearSettingsFlow(settings: settings(),
+                                      makeDirectory: directory(Recorder()),
+                                      store: { _ in })
+        await flow.test(key: "lin_api_abc")
+        flow.projectID = "p1"
+
+        await flow.refresh()
+
+        XCTAssertEqual(flow.teamID, "t1")
+        XCTAssertEqual(flow.projectID, "p1")
+    }
+
+    /// Nothing to refresh with is not a failure, and must not report one.
+    func testRefreshingBeforeThereIsACredentialDoesNothing() async {
+        let recorder = Recorder()
+        let flow = LinearSettingsFlow(settings: settings(),
+                                      makeDirectory: directory(recorder),
+                                      store: { _ in })
+
+        let refreshed = await flow.refresh()
+
+        XCTAssertFalse(refreshed)
+        XCTAssertEqual(flow.connection, .idle)
+        XCTAssertTrue(recorder.queries.isEmpty, "it must not ask Linear with nothing")
+    }
+
     // MARK: - Signing out
 
     /// The panel showed a full-width "Sign in with Linear" to somebody who already

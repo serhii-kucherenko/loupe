@@ -83,6 +83,15 @@ public struct LinearSettingsSheet: View {
 
                 picker("Project", selection: $flow.projectID,
                        options: [("", "None")] + flow.projects.map { ($0.id, $0.name) })
+
+                // Loupe does not create projects. Linear has no scope that allows it
+                // short of `write`, which is write access to a whole account, and an
+                // annotation tool has no business asking for that. So this says where
+                // to go and the button below brings the new one back.
+                Text("Need another project? Make it in Linear, then Refresh.")
+                    .font(LoupeTheme.Typography.note)
+                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             footer
@@ -207,12 +216,32 @@ public struct LinearSettingsSheet: View {
 
     private var footer: some View {
         HStack {
-            // Bordered, not quiet: a quiet button has no outline until it is
-            // hovered, and there is no hover on a touch screen - so on the device
-            // this read as a label rather than something to press.
-            Button("Test connection") { Task { await flow.test(key: key) } }
-                .buttonStyle(LoupeButtonStyle(kind: .secondary))
-                .disabled(key.isEmpty || flow.connection == .testing)
+            // One button, two jobs, because they are the same request. Before there
+            // is a credential it proves the one being typed; afterwards it asks
+            // Linear again, which is how a project made in the browser a moment ago
+            // turns up in the picker.
+            //
+            // It used to be disabled whenever the key field was empty - which, after
+            // signing in, it always is. So somebody who signed in had no way to
+            // refresh anything at all.
+            //
+            // Bordered, not quiet: a quiet button has no outline until it is hovered,
+            // and there is no hover on a touch screen - so on the device this read as
+            // a label rather than something to press.
+            Button(isSignedIn ? "Refresh" : "Test connection") {
+                Task {
+                    if isSignedIn {
+                        await flow.refresh()
+                    } else {
+                        await flow.test(key: key)
+                    }
+                }
+            }
+            .buttonStyle(LoupeButtonStyle(kind: .secondary))
+            .disabled(flow.connection == .testing || (!isSignedIn && key.isEmpty))
+            .accessibilityLabel(isSignedIn
+                                ? "Refresh teams and projects from Linear"
+                                : "Test the connection to Linear")
             Spacer()
             Button("Save") {
                 // Only on a write that actually took. A panel that closes on a refused

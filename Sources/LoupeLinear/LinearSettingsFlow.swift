@@ -130,6 +130,23 @@ public final class LinearSettingsFlow: ObservableObject {
         projects = (try? await makeDirectory(credential).projects(teamID: teamID)) ?? []
     }
 
+    /// Asks Linear again with the credential already proved.
+    ///
+    /// The way to see a project made in Linear a moment ago. Loupe deliberately
+    /// cannot create one - Linear has no scope for it short of `write`, which is
+    /// write access to an entire account, and that is not a trade an annotation tool
+    /// should ask anybody to make. So the answer is to make it in Linear and have
+    /// this pick it up, which has to be one obvious button rather than quitting the
+    /// app.
+    ///
+    /// - Returns: `false` when there is nothing to refresh with yet.
+    @discardableResult
+    public func refresh() async -> Bool {
+        guard let credential else { return false }
+        await connect(credential)
+        return true
+    }
+
     /// Forgets the credential and everything that depended on it.
     ///
     /// The destination goes too. A team id left behind a credential that no longer
