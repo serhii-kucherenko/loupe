@@ -9,22 +9,29 @@ import XCTest
 @MainActor
 final class LinearSettingsFlowTests: XCTestCase {
 
-    private var defaults: UserDefaults!
-    private var account: String!
-
-    override func setUp() {
-        super.setUp()
-        account = "flow-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: account)
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: account)
-        super.tearDown()
-    }
-
+    /// A fresh, empty store, made inside the test rather than in `setUp`.
+    ///
+    /// `setUp` is nonisolated and this case is `@MainActor`, so Swift 6 refuses to let
+    /// it touch anything the class owns. Making it here, in a method the tests already
+    /// call from the main actor, avoids the whole question - and each call wipes its
+    /// own suite first, so nothing carries over even when a run is interrupted.
     private func settings() -> LinearSettings {
-        LinearSettings(account: account, defaults: defaults)
+        let account = "flow-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: account)!
+        defaults.removePersistentDomain(forName: account)
+        return LinearSettings(account: account, defaults: defaults)
+    }
+
+    /// A Keychain write that the environment may simply refuse - a CI runner with no
+    /// keychain, an app with no entitlement - which is not this test failing. The iOS
+    /// simulator refuses every one of them, and three tests went red in CI for
+    /// exactly that reason after `save` started throwing.
+    private func skipIfKeychainRefuses(_ write: () throws -> Void) throws {
+        do {
+            try write()
+        } catch LinearError.couldNotStore(let status) {
+            throw XCTSkip("the Keychain refused the write (OSStatus \(status))")
+        }
     }
 
     /// A Keychain that will not have it, which is what an app with no entitlement
@@ -99,7 +106,7 @@ final class LinearSettingsFlowTests: XCTestCase {
     /// disabled with a perfectly good credential and nothing saying why.
     func testReopeningWithASavedCredentialFillsThePickers() async throws {
         let saved = settings()
-        try saved.save(.apiKey("lin_api_abc"))
+        try skipIfKeychainRefuses { try saved.save(.apiKey("lin_api_abc")) }
 
         let recorder = Recorder()
         let flow = LinearSettingsFlow(settings: saved, makeDirectory: directory(recorder))
@@ -166,7 +173,7 @@ final class LinearSettingsFlowTests: XCTestCase {
 
     func testATeamAlreadyChosenIsNotQuietlyMoved() async throws {
         let saved = settings()
-        try saved.save(.apiKey("lin_api_abc"))
+        try skipIfKeychainRefuses { try saved.save(.apiKey("lin_api_abc")) }
         saved.destination = LinearDestination(teamID: "t2", projectID: nil)
 
         let recorder = Recorder()
@@ -182,7 +189,7 @@ final class LinearSettingsFlowTests: XCTestCase {
     /// sending into a team that was deleted and nothing says so.
     func testATeamThatNoLongerExistsFallsBack() async throws {
         let saved = settings()
-        try saved.save(.apiKey("lin_api_abc"))
+        try skipIfKeychainRefuses { try saved.save(.apiKey("lin_api_abc")) }
         saved.destination = LinearDestination(teamID: "gone", projectID: nil)
 
         let flow = LinearSettingsFlow(settings: saved, makeDirectory: directory(Recorder()))
