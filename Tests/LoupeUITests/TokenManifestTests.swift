@@ -5,7 +5,18 @@ import LoupeCore
 /// `docs/tokens.json` is what the Swift SDK and the web SDK are both tested against,
 /// so a token cannot quietly come to mean two different things on two platforms.
 /// This is the Swift half of that check.
+@MainActor
 final class TokenManifestTests: XCTestCase {
+
+    // The theme is global, so a test elsewhere that set a host theme and did not
+    // put it back would make this file pass or fail for a reason that is not in it.
+    override func setUp() {
+        super.setUp()
+        // `setUp()` is nonisolated even inside a `@MainActor` class. XCTest runs it
+        // on the main thread, so the assumption is true and the async overload -
+        // which would send a non-Sendable `XCTestCase` across isolation - is avoided.
+        MainActor.assumeIsolated { LoupeTheme.appearance = .stock }
+    }
 
     private struct Manifest: Decodable {
         struct Colour: Decodable {

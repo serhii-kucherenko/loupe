@@ -16,6 +16,7 @@ struct LoupeDemoiOSApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(server: delegate.server)
+                .tint(DemoLaunch.hostTint)
                 .background(WindowAccessor { window in
                     Loupe.attach(to: window)
                     DemoScene.run(in: window)

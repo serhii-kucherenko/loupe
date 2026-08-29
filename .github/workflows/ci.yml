@@ -163,9 +163,9 @@ jobs:
             -destination "id=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO | xcpretty
 
-  # Nothing to build, so it answers in seconds and on a Linux runner.
-  quiet-failures:
-    name: No new way to fail quietly
+  # Nothing to build, so they answer in seconds and on a Linux runner.
+  lint:
+    name: Nothing quiet, nothing hardcoded
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -176,6 +176,11 @@ jobs:
       # product can never find. A sweep finds today's six; this catches the
       # seventh.
       - run: python3 scripts/check-quiet-failures.py
+      # A host app can hand Loupe its own tokens, and that promise is only as
+      # good as the weakest call site. One hardcoded orange and the overlay is a
+      # visitor again in exactly one control - which reads as a bug rather than
+      # as a theme, and only shows up inside the host nobody testing Loupe runs.
+      - run: python3 scripts/check-theme-literals.py
 
   web:
     name: Build and test (web)

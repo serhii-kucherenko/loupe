@@ -240,6 +240,40 @@ Each note is one row: a thumbnail, two lines of what you said, and the endpoint
 behind it. Tap the words to rewrite them; tap the picture to see the whole thing. A
 drawer full of notes is a list you scan, not a gallery.
 
+### It can wear your design system
+
+Loupe's own look is a warm orange, on purpose: an overlay has to read as a tool, not
+as part of the app underneath it. But an app with an accent of its own gets to say
+so, and then the overlay stops looking like a visitor:
+
+```swift
+Loupe.start(app: app, theme: LoupeTheme.Appearance(
+    accent: .init(light: .init(hex: 0x4338CA), dark: .init(hex: 0xA5B4FC)),
+    action: .init(light: .init(hex: 0x4338CA), dark: .init(hex: 0xA5B4FC)),
+    panelRadius: 28,
+    controlRadius: 20))
+```
+
+Same overlay, same notes, four lines of tokens apart:
+
+| | |
+|---|---|
+| ![Loupe's own look](docs/screenshots/03-tray-light.png) | ![Wearing a host's tokens](docs/screenshots/11-host-theme-light.png) |
+| ![Loupe's own look, dark](docs/screenshots/03-tray-dark.png) | ![A host's tokens, dark](docs/screenshots/11-host-theme-dark.png) |
+
+Every field has a default, so you name only what you have an opinion about, and the
+wash inside a picked element follows your accent without being asked. Omit the
+argument entirely and nothing changes.
+
+**This is not a styling API.** There are no per-control overrides and no slots for
+your own views: colours, two radii and four fonts. An overlay that can be restyled
+arbitrarily becomes a UI framework, and the point is for this one to disappear into
+your app. `DESIGN.md` lists every token.
+
+The web SDK takes the same tokens, as CSS strings, so a page can point Loupe straight
+at a variable it already has: `start({ app, theme: { accent: "var(--brand)" } })`.
+See [`web/README.md`](web/README.md).
+
 Drag to say "this bit", on any platform. The rectangle is dashed while you draw it
 and solid once it is yours:
 

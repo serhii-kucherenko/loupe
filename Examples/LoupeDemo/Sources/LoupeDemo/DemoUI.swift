@@ -180,6 +180,28 @@ enum DemoLaunch {
                 .appendingPathComponent("tray.json"))
     }
 
+    /// The demo pretending to be a host app with a design system of its own.
+    ///
+    /// `--host-theme` launches with it; without the flag Loupe wears its own look, so
+    /// the two runs side by side are the whole feature. Three fields, which is the
+    /// point: a host names what it has an opinion about and nothing else.
+    ///
+    ///     xcrun simctl launch <device> dev.loupe.demo --host-theme
+    static var hostTheme: LoupeTheme.Appearance {
+        guard CommandLine.arguments.contains("--host-theme") else { return .stock }
+        let indigo = LoupeTheme.ColorToken(light: LoupeTheme.RGBA(hex: 0x4338CA),
+                                           dark: LoupeTheme.RGBA(hex: 0xA5B4FC))
+        return LoupeTheme.Appearance(accent: indigo, action: indigo,
+                                     panelRadius: 28, controlRadius: 20)
+    }
+
+    /// The same accent, for the demo's own controls. A host whose app and overlay
+    /// disagree proves nothing.
+    static var hostTint: Color? {
+        CommandLine.arguments.contains("--host-theme")
+            ? Color(red: 0.263, green: 0.220, blue: 0.792) : nil
+    }
+
     static func start(server: StubServer, platform: String) {
         Self.server = server
         do {
@@ -204,7 +226,7 @@ enum DemoLaunch {
         // and delivery switches itself on when the credential exists.
         let local = queuedTransport(server: server, appName: app.name)
             ?? FileTransport(directory: FileTransport.defaultDirectory(appName: app.name))
-        Loupe.start(app: app, transport: LinearDelivery(keeping: local))
+        Loupe.start(app: app, transport: LinearDelivery(keeping: local), theme: hostTheme)
 
         // Puts the settings panel behind the tray's gear. Everything Linear in this
         // demo is these two lines.

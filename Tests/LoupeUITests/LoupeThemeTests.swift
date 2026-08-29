@@ -4,6 +4,7 @@ import LoupeCore
 
 /// `DESIGN.md` promises contrast out loud. A promise you cannot measure is a
 /// promise you will break, so these tests hold the tokens to it.
+@MainActor
 final class LoupeThemeTests: XCTestCase {
 
     private func surface(dark: Bool) -> LoupeTheme.RGBA {

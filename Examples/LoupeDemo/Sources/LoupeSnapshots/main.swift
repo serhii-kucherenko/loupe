@@ -61,7 +61,28 @@ enum HostLayout {
     static let basket = CGRect(x: 520, y: 150, width: 300, height: 110)
 }
 
+/// A host app with a design system of its own.
+///
+/// Loupe's own look is a warm orange, on purpose: it must read as a tool rather than
+/// as part of the app underneath. But a host that *has* an accent gets to say so -
+/// and an overlay in somebody else's colours is the difference between a control
+/// that belongs on the screen and one that reads as broken.
+enum HostBrand {
+    static let accent = LoupeTheme.ColorToken(light: LoupeTheme.RGBA(hex: 0x4338CA),
+                                              dark: LoupeTheme.RGBA(hex: 0xA5B4FC))
+
+    /// What this host would pass to `Loupe.start(app:theme:)`. Three fields, which
+    /// is the point: a host names what it has an opinion about and nothing else.
+    static let loupe = LoupeTheme.Appearance(accent: accent,
+                                             action: accent,
+                                             panelRadius: 28,
+                                             controlRadius: 20)
+}
+
 struct HostApp<Overlay: View>: View {
+    /// nil for the plain host. A colour turns this into a branded app, so the
+    /// overlay drawn over it can be seen agreeing with it.
+    var brand: Color?
     @ViewBuilder var overlay: Overlay
 
     var body: some View {
@@ -69,6 +90,7 @@ struct HostApp<Overlay: View>: View {
             Color(nsColor: .windowBackgroundColor)
 
             Text("Stock").font(.title2).bold()
+                .foregroundStyle(brand ?? Color(nsColor: .labelColor))
                 .frame(width: 200, height: 28, alignment: .leading)
                 .offset(x: HostLayout.rowX, y: 40)
 
@@ -79,10 +101,12 @@ struct HostApp<Overlay: View>: View {
                     .background(Color(nsColor: .textBackgroundColor))
                     .border(Color.secondary.opacity(0.35))
                 Text("Search")
+                    .foregroundStyle(brand == nil ? Color(nsColor: .labelColor) : .white)
                     .padding(.horizontal, 12)
                     .frame(height: 28)
-                    .background(Color(nsColor: .controlColor))
-                    .border(Color.secondary.opacity(0.35))
+                    .background(brand ?? Color(nsColor: .controlColor))
+                    .clipShape(RoundedRectangle(cornerRadius: brand == nil ? 0 : 14))
+                    .border(brand == nil ? Color.secondary.opacity(0.35) : .clear)
             }
             .offset(x: HostLayout.rowX, y: 92)
 
@@ -115,6 +139,16 @@ enum Scene: String, CaseIterable {
     case hover = "01-hover"
     case comment = "02-comment"
     case tray = "03-tray"
+    /// The same drawer, in a host app's own accent and radii. Kept next to `tray`
+    /// in `docs/screenshots/` precisely so the two can be looked at together: same
+    /// overlay, same content, wearing somebody else's design system.
+    case hosted = "11-host-theme"
+
+    /// What the host would have passed to `Loupe.start`.
+    var theme: LoupeTheme.Appearance { self == .hosted ? HostBrand.loupe : .stock }
+
+    /// The accent the app underneath is drawn in, so the agreement is visible.
+    var brand: Color? { self == .hosted ? Color(red: 0.263, green: 0.220, blue: 0.792) : nil }
 
     private static func ref(_ frame: CGRect, id: String, label: String) -> ElementRef {
         ElementRef(accessibilityID: id, label: label, className: "ResultRow",
@@ -142,7 +176,7 @@ enum Scene: String, CaseIterable {
             model.hover(row)
         case .comment:
             model.pick(row, screen: "/search")
-        case .tray:
+        case .tray, .hosted:
             model.pick(row, screenshotPNG: crop(row.bounds), screen: "/search")
             model.saveComment("clearing the search leaves the old results on screen", tag: .bug)
             model.resumePicking()
@@ -166,11 +200,11 @@ enum Scene: String, CaseIterable {
 /// would be its source. Rendering twice is cheaper than every other way of getting a
 /// truthful picture into a thumbnail.
 @MainActor
-func hostOnly(appearance: NSAppearance) -> CGImage? {
+func hostOnly(appearance: NSAppearance, brand: Color? = nil) -> CGImage? {
     let window = NSWindow(contentRect: NSRect(origin: .zero, size: HostLayout.size),
                           styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = appearance
-    window.contentView = NSHostingView(rootView: HostApp { EmptyView() })
+    window.contentView = NSHostingView(rootView: HostApp(brand: brand) { EmptyView() })
     window.orderBack(nil)
     RunLoop.main.run(until: Date().addingTimeInterval(0.35))
     defer { window.close() }
@@ -200,12 +234,19 @@ func cut(_ image: CGImage, to bounds: Rect) -> Data? {
 
 @MainActor
 func capture(_ scene: Scene, appearance: NSAppearance, to url: URL) {
-    let host = hostOnly(appearance: appearance)
+    // Set before the model is built and the window is rendered: the theme is what
+    // every token reads, so anything drawn before this point is drawn in the last
+    // scene's colours.
+    LoupeTheme.appearance = scene.theme
+    defer { LoupeTheme.appearance = .stock }
+
+    let host = hostOnly(appearance: appearance, brand: scene.brand)
     let model = scene.model { bounds in host.flatMap { cut($0, to: bounds) } }
     let window = NSWindow(contentRect: NSRect(origin: .zero, size: HostLayout.size),
                           styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = appearance
-    window.contentView = NSHostingView(rootView: HostApp { OverlayRoot(model: model) })
+    window.contentView = NSHostingView(
+        rootView: HostApp(brand: scene.brand) { OverlayRoot(model: model) })
     window.orderBack(nil)
 
     // Let SwiftUI lay out and settle before the bitmap is taken.

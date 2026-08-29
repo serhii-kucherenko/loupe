@@ -25,7 +25,14 @@ public enum Loupe {
     /// Defaults to writing bundles into `~/.loupe/<app>/` on macOS, so it works with
     /// no server to run. The tray itself is written to disk on every change, so
     /// killing the app does not lose what someone already typed.
-    public static func start(app: AppInfo, transport: Transport? = nil) {
+    /// - Parameter theme: the host's own tokens, so the overlay stops looking like a
+    ///   visitor in somebody else's app. Every field has a default, so a host names
+    ///   only what it has an opinion about, and omitting the argument entirely gives
+    ///   exactly Loupe's own look.
+    public static func start(app: AppInfo,
+                             transport: Transport? = nil,
+                             theme: LoupeTheme.Appearance = .stock) {
+        LoupeTheme.appearance = theme
         NetworkRecorder.install()
 
         let directory = FileTransport.defaultDirectory(appName: app.name)
@@ -118,6 +125,9 @@ public enum Loupe {
     }
 
     public static func stop() {
+        // Back to Loupe's own look, so a second `start` with no theme is not still
+        // wearing the last host's.
+        LoupeTheme.appearance = .stock
         NetworkRecorder.uninstall()
         // Ask, do not assume. Dropping the reference is not a teardown: on iOS the
         // scene retains the overlay's window, so `host = nil` on its own left the

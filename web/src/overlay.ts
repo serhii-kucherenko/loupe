@@ -34,6 +34,7 @@ function between(a: { x: number; y: number }, b: { x: number; y: number }): Rect
 import type { LogRecorder, NetworkRecorder } from "./recorder.js";
 import { screenshotPNG } from "./capture.js";
 import { overlayCSS } from "./overlay.css.js";
+import type { Theme } from "./tokens.js";
 import { tagColour } from "./tokens.js";
 
 export interface PendingPick {
@@ -75,6 +76,8 @@ export interface OverlayOptions {
   screen?: () => string;
   /** Off in tests and anywhere a canvas is not worth the milliseconds. */
   captureScreenshots?: boolean;
+  /** The host app's own tokens, so the overlay stops looking like a visitor. */
+  theme?: Theme;
 }
 
 /**
@@ -112,7 +115,7 @@ export class Overlay {
     this.host = this.doc.createElement("loupe-overlay");
     this.root = this.host.attachShadow({ mode: "open" });
     const style = this.doc.createElement("style");
-    style.textContent = overlayCSS();
+    style.textContent = overlayCSS(options.theme ?? {});
     this.root.append(style);
     this.doc.body.append(this.host);
 

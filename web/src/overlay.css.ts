@@ -1,4 +1,4 @@
-import { cssVariables } from "./tokens.js";
+import { cssVariables, type Theme } from "./tokens.js";
 
 /**
  * Every rule reads a variable. No literal colour, size or duration appears here -
@@ -10,8 +10,8 @@ import { cssVariables } from "./tokens.js";
  * global `* { box-sizing }` or a `div { margin: 0 }` reset would otherwise reshape
  * the tool sitting on top of it.
  */
-export function overlayCSS(): string {
-  return `${cssVariables()}
+export function overlayCSS(theme: Theme = {}): string {
+  return `${cssVariables(theme)}
 
 :host {
   position: fixed;

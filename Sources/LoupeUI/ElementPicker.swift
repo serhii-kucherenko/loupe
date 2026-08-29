@@ -512,6 +512,7 @@ public enum ElementPicker {
     }
 
     /// `stroke.highlight` in `loupe.highlight`, the same outline the overlay draws.
+    @MainActor
     private static func outline(_ frame: CGRect, in context: CGContext) {
         let colour = LoupeTheme.Colors.highlight.light
         context.setStrokeColor(red: colour.red, green: colour.green,
