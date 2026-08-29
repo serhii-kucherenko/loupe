@@ -36,14 +36,67 @@ final class LinearDeliveryTests: XCTestCase {
         super.tearDown()
     }
 
-    // Someone who has not set Linear up yet is still annotating perfectly well.
-    func testNotConfiguredIsNotAFailure() async throws {
+    /// This test used to assert the opposite, and the opposite was the bug.
+    ///
+    /// Serhii, after two notes were reported as sent and neither existed in Linear:
+    /// *"No that's bad. If linear is not connected then what is sent? send should
+    /// throw you an error like 'show toast'. With the reason"*. Nothing was sent. The
+    /// local file is a safety net, not the delivery, and reporting a send is a lie
+    /// about the only thing this tool does.
+    func testNotBeingConnectedIsAFailure() async {
         let local = Spy()
         let delivery = LinearDelivery(keeping: local, settings: settings())
 
-        try await delivery.send(bundle())
+        do {
+            try await delivery.send(bundle())
+            XCTFail("a send that never reached Linear must not report success")
+        } catch {
+            XCTAssertEqual(error as? LinearError, .notConfigured)
+            XCTAssertEqual(local.sent, 1,
+                           "and the note is still safe - only the reporting was wrong")
+        }
+    }
 
-        XCTAssertEqual(local.sent, 1, "the local copy is always kept")
+    /// "With the reason": the message has to name what is missing, and the tray must
+    /// not offer a Try again that cannot possibly work.
+    func testTheReasonIsSomethingSomebodyCanActOn() async {
+        let delivery = LinearDelivery(keeping: Spy(), settings: settings())
+
+        do {
+            try await delivery.send(bundle())
+            XCTFail("expected a failure")
+        } catch {
+            XCTAssertEqual(error.localizedDescription,
+                           "No Linear credential yet. Open Loupe settings and add one.")
+            XCTAssertFalse((error as? RetryableError)?.isWorthRetrying ?? true,
+                           "sending it again cannot help - the settings panel can")
+        }
+    }
+
+    /// A credential with nowhere to send to is the other half of the same bug: it was
+    /// skipped just as silently, and it is not a missing credential.
+    func testACredentialWithNoTeamAlsoFails() async throws {
+        let store = settings()
+        try skipIfKeychainRefuses { try store.save(.apiKey("lin_api_test")) }
+        store.destination = nil
+
+        let local = Spy()
+        do {
+            try await LinearDelivery(keeping: local, settings: store).send(bundle())
+            XCTFail("no team means nowhere to send")
+        } catch {
+            XCTAssertEqual(error as? LinearError, .notPermitted("no team chosen yet"))
+            XCTAssertEqual(local.sent, 1)
+        }
+    }
+
+    /// A Keychain that refuses the write is the environment, not this test failing.
+    private func skipIfKeychainRefuses(_ write: () throws -> Void) throws {
+        do {
+            try write()
+        } catch LinearError.couldNotStore(let status) {
+            throw XCTSkip("the Keychain refused the write (OSStatus \(status))")
+        }
     }
 
     // A Linear outage must never cost somebody their note.

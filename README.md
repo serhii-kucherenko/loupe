@@ -39,6 +39,11 @@ paste a personal API key or sign in with Linear. The credential goes to the Keyc
 The workspace is shown, because a credential belongs to exactly one; team and project
 are pickers, because nobody types a UUID on an iPad.
 
+**A send that did not reach Linear never reports success.** If Linear is not set up
+yet, Send fails and says so - it does not quietly keep the note in a folder and tell
+you it was delivered. The local copy is always written first, so nothing is ever lost;
+only the reporting was ever in question.
+
 **One issue per note, never one per batch** - a session's notes are unrelated to each
 other. Sending is safe to repeat: a note whose issue already exists is a no-op, so a
 retry after a dropped connection cannot double-file.

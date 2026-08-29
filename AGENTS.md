@@ -57,6 +57,13 @@ contract: additive changes only, no breaking renames without a major.
   not want to make one. `scripts/check-quiet-failures.py` runs in CI and fails on a
   new one; `scripts/quiet-failures.allow` holds every argued-for case with its reason.
   Writing the reason is the check - if you cannot, that is the finding.
+  **And an allow-list entry argues about a case, while a `try?` swallows a type.** The
+  eighth one got through the lint on a reason that was true: "not being configured is
+  not a failure". True of `.notConfigured`, false of every other error that line could
+  throw - so a missing team became a silent skip, and a skip read as success because
+  the local write had already happened. Two notes were reported as delivered on a real
+  iPad and neither existed in Linear. If the reason does not hold for **every** error
+  the expression can throw, the entry is wrong even though every word of it is right.
 - A credential belongs in the Keychain and nowhere else. There is a test asserting it
   never reaches `UserDefaults`; keep it passing. **A refused write is an error somebody
   must see, never a `Bool` that gets discarded** - `save(_:)` throws

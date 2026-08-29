@@ -11,7 +11,14 @@ Sources/LoupeCore/AnnotationSession.swift	guard let saved = try? decoder.decode(
 Sources/LoupeCore/QueuedTransport.swift	try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))	Sleep only throws on cancellation, and a cancelled retry should stop retrying. There is no failure here to report.
 Sources/LoupeCore/QueuedTransport.swift	let found = (try? FileManager.default.contentsOfDirectory(	A queue directory that does not exist yet holds nothing waiting, which is exactly what an empty list means.
 Sources/LoupeCore/Transport.swift	let base = (try? FileManager.default.url(	Falls back to a documented default directory. The host is told where bundles go either way.
-Sources/LoupeLinear/LinearDelivery.swift	guard let linear = try? settings.transport(endpoint: endpoint) else { return }	Not being configured for Linear is not a failure. Annotating works from the first launch and delivery switches itself on when a credential exists.
+# Removed 2026-08-29. That reason was true for *one* of the two errors that line
+# swallowed, and false for every other - so a missing team became a silent skip, and
+# a skip reads as success because the local write already happened. Two notes were
+# reported delivered on a real iPad and neither existed in Linear.
+#
+# The lesson is about this file, not that line: an allow-list entry argues about a
+# case, and a `try?` swallows a *type*. If the reason does not hold for every error
+# the expression can throw, the entry is wrong even though every word of it is true.
 Sources/LoupeLinear/LinearDirectory.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {	Throws a LinearError on the next line. The `try?` only chooses which error, never whether there is one.
 Sources/LoupeLinear/LinearOAuth.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],	Same: the guard's else branch throws. Nothing is swallowed.
 Sources/LoupeLinear/LinearTransport.swift	guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {	Same: the guard's else branch throws.

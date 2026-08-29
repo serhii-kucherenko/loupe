@@ -135,13 +135,24 @@ struct TrayPanel: View {
                 .buttonStyle(LoupeButtonStyle(kind: .quiet))
             }
 
-            if case .failed(let why, _) = model.sendState {
+            if case .failed(let why, let canRetry) = model.sendState {
                 // The person reading this is a developer looking at their own staging
                 // build. The real reason is more use to them than a soft sentence.
                 Text(why)
-                    .font(LoupeTheme.Typography.caption)
+                    .font(LoupeTheme.Typography.note)
                     .foregroundStyle(LoupeTheme.Colors.highlight.color)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("Send failed: \(why)")
+
+                // A failure nothing can retry needs a way to fix it, not a button
+                // that cannot work. Almost every one of these is "Linear is not set
+                // up yet", and the panel is where that is set up.
+                if !canRetry, let onSettings = model.onSettings {
+                    Button(action: onSettings) {
+                        Label("Open Linear settings", systemImage: "gearshape")
+                    }
+                    .buttonStyle(LoupeButtonStyle(kind: .secondary))
+                }
             }
 
             Button("Pick another") { model.resumePicking() }
