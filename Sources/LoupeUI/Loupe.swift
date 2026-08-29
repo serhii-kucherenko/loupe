@@ -114,6 +114,10 @@ public enum Loupe {
 
     public static func stop() {
         NetworkRecorder.uninstall()
+        // Ask, do not assume. Dropping the reference is not a teardown: on iOS the
+        // scene retains the overlay's window, so `host = nil` on its own left the
+        // pill on screen with nothing behind it.
+        host?.stop()
         host = nil
         model = nil
         session = nil

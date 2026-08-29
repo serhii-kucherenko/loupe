@@ -120,16 +120,15 @@ public extension LoupeTheme {
         /// Send button, confirmation.
         public static let action = ColorToken(light: RGBA(hex: 0x2F7D5B),
                                               dark: RGBA(hex: 0x62C68E))
-        /// The ground behind a masked crop.
+        /// The ground behind a letterboxed thumbnail.
         ///
-        /// A shape drawn around two things excludes what sits between them, and the
-        /// crop has to show that exclusion rather than a hole. Transparent is not an
-        /// answer: a PNG with an alpha channel reads as broken on one viewer and as
-        /// white on another, and neither says "this was deliberately left out".
+        /// A crop is whatever shape the thing on screen was - usually a row, six
+        /// hundred points wide and forty tall. Fitted into a square that leaves
+        /// space above and below, and that space has to be a defined colour rather
+        /// than whatever the panel happens to be, or the picture has no edges.
         ///
-        /// Not `backdrop`, which is flat white. On a light app a white cutaway is
-        /// invisible, so the picture would look like an ordinary rectangular crop and
-        /// the whole point of drawing the shape would be lost on whoever reads it.
+        /// Not `backdrop`, which is flat white: on a light panel a white ground makes
+        /// a pale screenshot look like it is bleeding into the row.
         public static let cutaway = ColorToken(light: RGBA(hex: 0xE8EDEA),
                                                dark: RGBA(hex: 0x1E2823))
 

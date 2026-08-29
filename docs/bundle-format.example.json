@@ -84,65 +84,6 @@
       },
       "trace": [],
       "logs": []
-    },
-    {
-      "id": "1D2C3B4A-0000-4000-8000-000000000003",
-      "comment": "these two prices disagree, and the promo copy between them is fine",
-      "tag": "bug",
-      "capturedAt": "2026-08-28T09:14:01Z",
-      "screen": "/cart",
-      "viewport": {
-        "x": 0,
-        "y": 0,
-        "width": 1024,
-        "height": 768
-      },
-      "element": {
-        "kind": "path",
-        "bounds": {
-          "x": 288,
-          "y": 196,
-          "width": 448,
-          "height": 372
-        },
-        "path": [
-          [
-            300,
-            196
-          ],
-          [
-            736,
-            214
-          ],
-          [
-            720,
-            300
-          ],
-          [
-            340,
-            288
-          ],
-          [
-            332,
-            470
-          ],
-          [
-            700,
-            486
-          ],
-          [
-            688,
-            568
-          ],
-          [
-            288,
-            544
-          ]
-        ]
-      },
-      "trace": [],
-      "logs": [],
-      "screenshotPNG": "iVBORw0KGgo="
     }
   ]
 }

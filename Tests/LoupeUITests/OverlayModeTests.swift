@@ -54,13 +54,18 @@ final class OverlayModeTests: XCTestCase {
         XCTAssertEqual(pick.index, 1, "the first badge is 1, not 0")
 
         model.saveComment("stale results", tag: .bug)
-        XCTAssertEqual(model.mode, .browsing)
+        XCTAssertEqual(model.mode, .picking(hover: nil),
+                       "saving a note is not finishing - the next one starts here")
         XCTAssertEqual(model.annotations.map(\.comment), ["stale results"])
     }
 
-    /// The reason `browsing` exists at all: you have to be able to walk to another
-    /// screen with the tray still full.
-    func testOnlyPickingAndCommentingSwallowTheHostAppsInput() {
+    /// Annotating takes the app's input, and that is the whole of what annotate mode
+    /// is. Leaving is what gives the app back.
+    ///
+    /// It used to give the app back after every save, silently: `.browsing` looks
+    /// exactly like `.picking` and the app simply stopped answering picks. Nothing on
+    /// screen said which one you were in.
+    func testAnnotatingTakesTheAppsInputUntilYouLeave() {
         let model = makeModel()
         XCTAssertFalse(OverlayMode.off.swallowsInput)
         XCTAssertTrue(OverlayMode.picking(hover: nil).swallowsInput)
@@ -71,8 +76,10 @@ final class OverlayModeTests: XCTestCase {
         model.beginAnnotating()
         model.pick(ref("a"))
         model.saveComment("one", tag: nil)
-        XCTAssertFalse(model.mode.swallowsInput, "the app must be usable again")
-        XCTAssertTrue(model.mode.isVisible, "but the tray stays on screen")
+        XCTAssertTrue(model.mode.swallowsInput, "still annotating, so still picking")
+
+        model.endAnnotating()
+        XCTAssertFalse(model.mode.swallowsInput, "and the cross is what gives it back")
     }
 
     func testCancellingAPickReturnsToPickingNotOutOfAnnotateMode() {
@@ -210,7 +217,7 @@ final class OverlayModeTests: XCTestCase {
 
         XCTAssertEqual(heard, [.picking(hover: nil),
                                .commenting(PendingPick(ref: ref("a"), index: 1)),
-                               .browsing,
+                               .picking(hover: nil),
                                .off])
     }
 
@@ -326,16 +333,19 @@ final class TrayVisibilityTests: XCTestCase {
             app: AppInfo(name: "Demo", platform: "macOS"), transport: SpyTransport()))
     }
 
-    func testTheFullTrayBelongsToBrowsingOnly() {
+    /// `browsing` is now only where a failed send leaves you: the one place the
+    /// drawer has something you must read before carrying on.
+    func testBrowsingIsWhereAFailedSendLeavesYou() {
         let model = makeModel()
         model.beginAnnotating()
         model.pick(ref("a"))
         model.saveComment("one", tag: nil)
-        XCTAssertEqual(model.mode, .browsing, "after a save you are reviewing")
+        XCTAssertEqual(model.mode, .picking(hover: nil), "a save keeps you picking")
 
+        model.review()
+        XCTAssertEqual(model.mode, .browsing)
         model.resumePicking()
-        XCTAssertEqual(model.mode, .picking(hover: nil),
-                       "and while picking the page must be reachable again")
+        XCTAssertEqual(model.mode, .picking(hover: nil))
     }
 
     func testReviewOpensTheTrayFromTheCompactBar() {

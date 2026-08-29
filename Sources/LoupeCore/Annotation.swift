@@ -17,10 +17,6 @@ public enum AnnotationTag: String, Codable, Sendable, CaseIterable {
 public enum ElementKind: String, Codable, Sendable, Equatable {
     case view
     case region
-    /// A shape somebody drew. Says "these things, and not the things between them" -
-    /// the one thing a rectangle cannot say, because a box around two controls at
-    /// opposite corners of a card includes everything in between and means nothing.
-    case path
 }
 
 public struct ElementRef: Codable, Sendable, Equatable {
@@ -40,19 +36,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
     public var sourceFile: String?
     public var sourceLine: Int?
     /// On-screen bounds, in window points, used to crop the screenshot.
-    ///
-    /// Required for every kind, including `.path`, where it is the drawn shape's
-    /// bounding box. That is what keeps a consumer which has never heard of a path
-    /// working: it gets the rectangle it would have got from a drag. A missing field
-    /// degrades quality, never correctness.
     public var bounds: Rect
-    /// The drawn shape itself, in window points, closed implicitly. `.path` only.
-    ///
-    /// A flat point list rather than SVG path data: both SDKs already produce points,
-    /// neither needs curves, and anything can render it. Simplified before it is
-    /// stored, so a slow drag does not ship nine hundred points that sit on top of
-    /// each other.
-    public var path: [Point]?
 
     public init(
         kind: ElementKind = .view,
@@ -62,8 +46,7 @@ public struct ElementRef: Codable, Sendable, Equatable {
         selector: String? = nil,
         sourceFile: String? = nil,
         sourceLine: Int? = nil,
-        bounds: Rect,
-        path: [Point]? = nil
+        bounds: Rect
     ) {
         self.kind = kind
         self.accessibilityID = accessibilityID
@@ -73,7 +56,6 @@ public struct ElementRef: Codable, Sendable, Equatable {
         self.sourceFile = sourceFile
         self.sourceLine = sourceLine
         self.bounds = bounds
-        self.path = path
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,7 +68,6 @@ public struct ElementRef: Codable, Sendable, Equatable {
         sourceFile = try c.decodeIfPresent(String.self, forKey: .sourceFile)
         sourceLine = try c.decodeIfPresent(Int.self, forKey: .sourceLine)
         bounds = try c.decode(Rect.self, forKey: .bounds)
-        path = try c.decodeIfPresent([Point].self, forKey: .path)
     }
 }
 

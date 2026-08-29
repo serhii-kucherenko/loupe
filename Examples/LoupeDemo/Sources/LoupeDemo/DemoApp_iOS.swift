@@ -123,47 +123,6 @@ enum DemoScene {
                     }
                 }
 
-                // The lasso, mid-stroke and then committed. A shape drawn around
-                // two rows that are not next to each other, going *around* what
-                // sits between them - which is the one thing a rectangle cannot
-                // say, and therefore the only picture worth taking of this.
-                if scene == "lasso" || scene == "lassoing" {
-                    // Inside the card, not across the grey beside it. A shape that
-                    // spills into empty space says the person was aiming at the
-                    // background, which is the opposite of the point.
-                    let left = size.width * 0.07
-                    let right = size.width * 0.41
-                    let notch = size.width * 0.18
-                    let top = size.height * 0.20
-                    let waist = size.height * 0.30
-                    let bottom = size.height * 0.44
-                    let drawn = [
-                        CGPoint(x: left, y: top), CGPoint(x: right, y: top + 6),
-                        CGPoint(x: right - 4, y: waist - 8),
-                        CGPoint(x: notch, y: waist), CGPoint(x: notch + 4, y: waist + 30),
-                        CGPoint(x: right, y: waist + 34),
-                        CGPoint(x: right - 6, y: bottom),
-                        CGPoint(x: left + 4, y: bottom - 6),
-                    ]
-                    model.use(.draw)
-                    model.draw(to: drawn.map { Point(x: $0.x, y: $0.y) })
-                    if scene == "lasso" {
-                        if let shot = ElementPicker.capture(path: drawn, in: window) {
-                            print("LOUPE-SCENE lasso: kind=\(shot.ref.kind.rawValue) "
-                                  + "points=\(shot.ref.path?.count ?? 0) "
-                                  + "bounds=\(shot.ref.bounds) "
-                                  + "crop=\(shot.screenshotPNG?.count ?? 0)B")
-                            model.pick(shot.ref,
-                                       screenshotPNG: shot.screenshotPNG,
-                                       contextScreenshotPNG: shot.contextScreenshotPNG,
-                                       viewport: Rect(x: 0, y: 0, width: size.width,
-                                                      height: size.height))
-                        } else {
-                            print("LOUPE-SCENE lasso: the shape was refused")
-                        }
-                    }
-                }
-
                 // Which window holds the keyboard, in each mode. The host's own key
                 // commands go to the key window's responder chain, so an overlay
                 // that keeps key status silently breaks them.

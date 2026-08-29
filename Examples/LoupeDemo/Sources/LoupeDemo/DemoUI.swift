@@ -100,6 +100,21 @@ func demoImage(contentsOf url: URL) -> Image? {
 struct RootView: View {
     let server: StubServer
     @State private var role: Role = .annotator
+    @State private var loupeIsInstalled = true
+
+    /// Only under `--offer-teardown`, so it is never in a screenshot.
+    ///
+    /// A host that turns Loupe off from its own menu is the real case - and
+    /// `Loupe.stop()` used to leave the pill on screen with nothing behind it,
+    /// because a `UIWindow` shown in a scene is retained by the scene rather than by
+    /// whoever made it. That is not a thing a unit test can ask.
+    /// Deliberately not a `scene=`: every scene begins annotating, and this needs the
+    /// app exactly as it launches - pill and all - because the pill going away is the
+    /// thing being asserted.
+    private var offersTeardown: Bool {
+        CommandLine.arguments.contains("--offer-teardown")
+    }
+
 
     enum Role: String, CaseIterable, Identifiable {
         case annotator = "Annotator"
@@ -116,6 +131,14 @@ struct RootView: View {
             .labelsHidden()
             .padding(12)
 
+            if offersTeardown, loupeIsInstalled {
+                Button("Turn Loupe off") {
+                    Loupe.stop()
+                    loupeIsInstalled = false
+                }
+                .padding(.bottom, 12)
+            }
+
             Divider()
 
             switch role {
@@ -130,6 +153,25 @@ struct RootView: View {
 /// points stay to the few lines that are genuinely per-platform.
 @MainActor
 enum DemoLaunch {
+
+    /// Throws away any tray left on disk, before Loupe gets a chance to read it.
+    ///
+    /// The tray surviving the app being killed is a feature - it is the whole of the
+    /// offline queue - and it also makes UI tests order-dependent: one test that
+    /// saves a note leaves every later test looking at "1 note" where it expected
+    /// none. Five tests failed that way in one run and every one of them read as a
+    /// missing pull, which is a long way from the cause.
+    ///
+    /// Asked for by the same function Loupe uses rather than rebuilt here. The path
+    /// differs on Catalyst and inside a sandbox, and a second copy of that rule would
+    /// go stale silently - the demo would look clean and would not be.
+    static func clearSavedTrayIfAsked(appName: String) {
+        guard CommandLine.arguments.contains("--fresh-session") else { return }
+        try? FileManager.default.removeItem(
+            at: FileTransport.defaultDirectory(appName: appName)
+                .appendingPathComponent("tray.json"))
+    }
+
     static func start(server: StubServer, platform: String) {
         Self.server = server
         do {
@@ -147,6 +189,8 @@ enum DemoLaunch {
                           commitSHA: gitSHA(),
                           platform: platform,
                           environment: "staging")
+        clearSavedTrayIfAsked(appName: app.name)
+
         // Keep the folder, and deliver to Linear once somebody has configured it.
         // Not configured is not a failure: annotating works from the first launch,
         // and delivery switches itself on when the credential exists.

@@ -106,25 +106,8 @@ struct TrayPanel: View {
                     .accessibilityLabel("Where notes are sent")
             }
 
-            // Secondary, not primary. Send is the important button in this panel and
-            // two primaries in one panel means neither reads as the thing to press.
-            Button {
-                model.endAnnotating()
-            } label: {
-                Label("Done", systemImage: "checkmark")
-            }
-            .buttonStyle(LoupeButtonStyle(kind: .secondary))
-            .accessibilityLabel(exitLabel)
         }
         .padding(LoupeTheme.Space.md)
-    }
-
-    private var exitLabel: String {
-        switch model.annotations.count {
-        case 0: return "Finish annotating"
-        case 1: return "Finish annotating, 1 note"
-        case let n: return "Finish annotating, \(n) notes"
-        }
     }
 
 
@@ -196,46 +179,39 @@ struct TrayPanel: View {
                 }
             }
 
-            Button("Pick another") { model.resumePicking() }
-                .buttonStyle(LoupeButtonStyle(kind: .quiet))
-                .disabled(model.mode != .browsing)
-
-            Button {
-                Task { await model.send() }
-            } label: {
-                HStack(spacing: LoupeTheme.Space.sm) {
-                    if model.sendState == .sending {
-                        ProgressView().controlSize(.small)
+            // Only after a failure, which is the one state where this panel holds
+            // something you have to do rather than something you can read. Send
+            // itself lives on the pull, always on screen: it is one of the four steps
+            // of the job and it cannot be behind a drawer that starts shut.
+            if case .failed(_, let canRetry) = model.sendState, canRetry {
+                Button {
+                    Task { await model.send() }
+                } label: {
+                    HStack(spacing: LoupeTheme.Space.sm) {
+                        if model.sendState == .sending {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text("Try again")
+                        Spacer()
                     }
-                    Text(sendTitle)
-                    Spacer()
                 }
+                .buttonStyle(LoupeButtonStyle(kind: .primary, isFocused: sendFocused))
+                .focused($sendFocused)
+                .disabled(model.sendState == .sending)
+                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(LoupeButtonStyle(kind: .primary, isFocused: sendFocused))
-            .focused($sendFocused)
-            .disabled(model.annotations.isEmpty || model.sendState == .sending || !canSend)
-            .frame(maxWidth: .infinity)
+
+            // Only where it does something. Saving a note now leaves you picking, so
+            // in every ordinary moment this was a greyed-out button sitting alone in
+            // the footer - a control that looks dead teaches somebody the panel is
+            // dead. `.browsing` is only reached by a failed send now, which is
+            // exactly when there is a way back to want.
+            if model.mode == .browsing {
+                Button("Pick another") { model.resumePicking() }
+                    .buttonStyle(LoupeButtonStyle(kind: .quiet))
+            }
         }
         .padding(LoupeTheme.Space.md)
-    }
-
-    /// A failure nothing can retry leaves the button off, so the only thing on screen
-    /// worth doing is reading the message and fixing what it names.
-    private var canSend: Bool {
-        if case .failed(_, let canRetry) = model.sendState { return canRetry }
-        return true
-    }
-
-    private var sendTitle: String {
-        switch model.sendState {
-        case .sending: return "Sending"
-        // "Try again" only when trying again could work. A rejected credential will
-        // be rejected again, and a button that cannot succeed teaches somebody it is
-        // a lie. The message above it already says what to do instead.
-        case .failed(_, let canRetry): return canRetry ? "Try again" : "Send failed"
-        case .sent(let n): return "Sent \(n)"
-        case .idle: return model.annotations.count == 1 ? "Send 1 note" : "Send \(model.annotations.count) notes"
-        }
     }
 }
 
@@ -274,8 +250,8 @@ struct TrayRow: View {
                     // Fit, not fill. Most crops are a row: six hundred points wide
                     // and forty tall. Filled into a square that shows the middle
                     // forty by forty, which for a row is the blank gap between the
-                    // name and the price - so every note looks the same and the
-                    // thumbnail stops doing the one job it has.
+                    // name and the price - so every note looked the same and the
+                    // thumbnail stopped doing the one job it has.
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)

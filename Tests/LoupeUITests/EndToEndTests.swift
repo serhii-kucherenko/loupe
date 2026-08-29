@@ -67,7 +67,8 @@ final class EndToEndTests: XCTestCase {
                    screen: window.title,
                    viewport: Rect(x: 0, y: 0, width: 600, height: 400))
         model.saveComment("clearing the search leaves the old results on screen", tag: .bug)
-        XCTAssertEqual(model.mode, .browsing, "the app must be usable again after a save")
+        XCTAssertEqual(model.mode, .picking(hover: nil),
+                       "a save leaves you ready for the next note, not stranded")
 
         await model.send()
         XCTAssertEqual(model.mode, .off)
@@ -135,10 +136,13 @@ final class EndToEndTests: XCTestCase {
                    screen: "/search")
         model.saveComment("stale results", tag: .bug)
 
-        // Between the two, the person navigated. The overlay was not in the way.
-        XCTAssertFalse(model.mode.swallowsInput)
+        // Between the two, the person left annotate mode, walked to another screen,
+        // and came back. That is what walking now costs: a cross and the pill, both
+        // on screen, rather than a state nothing announced.
+        model.endAnnotating()
+        XCTAssertFalse(model.mode.swallowsInput, "the app is theirs again")
+        model.beginAnnotating()
 
-        model.resumePicking()
         model.pick(ElementRef(accessibilityID: "cart.empty",
                               bounds: Rect(x: 0, y: 0, width: 10, height: 10)),
                    screen: "/cart")

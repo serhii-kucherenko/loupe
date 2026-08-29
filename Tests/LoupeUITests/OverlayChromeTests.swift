@@ -50,7 +50,7 @@ final class OverlayChromeTests: XCTestCase {
         m.beginAnnotating()
         saveANote(m)
 
-        XCTAssertEqual(m.mode, .browsing)
+        XCTAssertEqual(m.mode, .picking(hover: nil))
         XCTAssertFalse(m.trayExpanded, "the layout must not change under someone's hands")
         XCTAssertEqual(m.annotations.count, 1, "only the count moves")
     }
@@ -96,71 +96,56 @@ final class OverlayChromeTests: XCTestCase {
         XCTAssertFalse(m.trayExpanded)
     }
 
-    // MARK: - The tool control says what exists, and never traps you
+    // MARK: - Both gestures work, and neither has to be chosen
 
-    func testTheToolStartsAtPoint() {
+    /// The tool control is gone: "I don't need too much configuration, the rectangle
+    /// select is enough". It only ever reflected what you had just done, so it was
+    /// configuration for its own sake - and the one thing it was added for,
+    /// discoverability, a sentence in the hint does without asking anything.
+    ///
+    /// What must survive its removal is that both gestures still land.
+    func testATapPicksAnElement() {
         let m = model()
         m.beginAnnotating()
-        XCTAssertEqual(m.tool, .point)
-    }
-
-    func testChoosingAToolSelectsIt() {
-        let m = model()
-        m.beginAnnotating()
-        m.use(.box)
-        XCTAssertEqual(m.tool, .box)
-    }
-
-    /// The whole reason it does not lock: a control someone can get stuck in the
-    /// wrong side of is worse than the missing signpost it replaced.
-    func testATapStillPicksAnElementWhileBoxIsSelected() {
-        let m = model()
-        m.beginAnnotating()
-        m.use(.box)
 
         m.pick(ref("row"))
 
         guard case .commenting(let pick) = m.mode else {
-            return XCTFail("a tap must still pick, whatever the control says")
+            return XCTFail("a tap must pick")
         }
         XCTAssertEqual(pick.ref.kind, .view)
     }
 
-    func testADragStillMakesARegionWhilePointIsSelected() {
+    func testADragMakesARegion() {
         let m = model()
         m.beginAnnotating()
-        m.use(.point)
 
         m.pick(region("area"))
 
         guard case .commenting(let pick) = m.mode else {
-            return XCTFail("a drag must still make a region, whatever the control says")
+            return XCTFail("a drag must make a region")
         }
         XCTAssertEqual(pick.ref.kind, .region)
     }
 
-    /// It teaches by reflecting rather than instructing. Somebody who drags a box
-    /// while Point is lit has just said which tool they meant.
-    func testTheControlFollowsWhatYouActuallyDid() {
+    /// The plural in "make annotations". Saving used to drop to `.browsing`, a state
+    /// with nothing on screen to say you were in it, where the app stopped answering
+    /// picks and the only way on was a button inside a drawer that starts shut.
+    func testSavingANoteLeavesYouReadyToPickTheNextOne() {
         let m = model()
         m.beginAnnotating()
-        XCTAssertEqual(m.tool, .point)
-
-        m.pick(region("area"))
-        XCTAssertEqual(m.tool, .box, "a region pick means Box")
-
-        m.cancelComment()
         m.pick(ref("row"))
-        XCTAssertEqual(m.tool, .point, "and an element pick means Point again")
-    }
+        m.saveComment("the stock count is unreadable", tag: .polish)
 
-    func testEveryToolSaysWhatItDoesInWords() {
-        for tool in PickTool.allCases {
-            XCTAssertFalse(tool.hint.isEmpty, "\(tool) needs a hint - that is the point")
-            XCTAssertFalse(tool.title.isEmpty)
-            XCTAssertFalse(tool.symbol.isEmpty)
-            XCTAssertTrue(tool.accessibilityLabel.contains(tool.title),
-                          "the spoken label should name the tool: \(tool.accessibilityLabel)")
+        guard case .picking = m.mode else {
+            return XCTFail("saving a note is not finishing: \(m.mode)")
+        }
+        XCTAssertEqual(m.annotations.count, 1)
+
+        // And again, with nothing found in between.
+        m.pick(ref("basket"))
+        guard case .commenting = m.mode else {
+            return XCTFail("the second note must not need a hidden button first")
         }
     }
 

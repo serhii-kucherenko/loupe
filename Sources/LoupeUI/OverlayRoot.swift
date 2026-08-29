@@ -114,16 +114,20 @@ public struct OverlayRoot: View {
     @ViewBuilder
     private func pull(in size: CGSize) -> some View {
         VStack(spacing: 0) {
-            // On the pull, not inside the drawer. The complaint was that nothing said
-            // drag-select existed - and a control that only appears once you have
-            // opened a drawer is not findable by somebody who does not know the
-            // drawer has anything in it.
-            if case .picking = model.mode {
-                toolControl
-                Divider()
-                    .overlay(LoupeTheme.Colors.line.color)
-                    .padding(.horizontal, LoupeTheme.Space.xs)
+            grip
+
+            // Send and Finish live here, not in the drawer, because they are two of
+            // the four steps of the whole job - "enter the annotation mode, make
+            // annotations, send it and close it" - and both were behind a drawer that
+            // starts shut. Entering cost one tap; ending cost two, in a place nobody
+            // could find. A panel holding every action somebody needs cannot be the
+            // thing they have to discover first.
+            if !model.annotations.isEmpty {
+                sendButton
+                rule
             }
+            finishButton
+            rule
             drawerButton
         }
         // Sized to its contents before it is placed. `.position` proposes the whole
@@ -157,13 +161,18 @@ public struct OverlayRoot: View {
     @ViewBuilder
     private func hint(in size: CGSize) -> some View {
         if case .picking = model.mode, !model.trayExpanded {
-            Text(model.tool.hint)
+            // Both gestures, because both work and neither is chosen. A control
+            // that only ever reflected what you just did was configuration for its
+            // own sake: "I don't need too much configuration, the rectangle select
+            // is enough". A sentence does the discoverability job the control was
+            // added for, and asks nothing of anybody.
+            Text("Tap what looks wrong, or drag around it")
                 .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.ink.color)
-                // Two, not one. Draw is the only tool somebody can be stuck in, so
-                // its hint has to carry the way out as well as the way in - and at
-                // one line that sentence arrived as "Draw around what looks wro…",
-                // which cuts off exactly the half nobody can guess.
+                // Two, not one. At a fixed width and one line this arrived as "Tap
+                // what looks wrong, or dra…", which cuts off the half nobody would
+                // guess - and this line is the only thing on screen that says the
+                // second gesture exists at all.
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -189,34 +198,92 @@ public struct OverlayRoot: View {
     /// clear of the pull rather than under it.
     private var hintWidth: CGFloat { 190 }
 
-    /// Point or Box. Lit is what the next gesture is expected to be, not what it is
-    /// allowed to be - both gestures work whichever is lit.
-    private var toolControl: some View {
-        VStack(spacing: LoupeTheme.Space.xs) {
-            ForEach(PickTool.allCases, id: \.self) { tool in
-                Button { model.use(tool) } label: {
-                    Image(systemName: tool.symbol)
-                        .frame(width: LoupeTheme.Hit.touch - LoupeTheme.Space.md,
-                               height: LoupeTheme.Hit.touch - LoupeTheme.Space.md)
+    /// Says "drag me", which nothing else here did: "handler doesn't look like
+    /// draggable btw". Horizontal bars on a pull that travels vertically - the grip
+    /// runs across the direction of travel, the way every sheet grabber does.
+    ///
+    /// Not a button any more. It sits above three of them now, and a grip that is
+    /// itself tappable is a fourth target nobody wants to hit; the drag lives on the
+    /// pull as a whole.
+    private var grip: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(LoupeTheme.Typography.note)
+            .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, LoupeTheme.Space.sm)
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+    }
+
+    private var rule: some View {
+        Divider()
+            .overlay(LoupeTheme.Colors.line.color)
+            .padding(.horizontal, LoupeTheme.Space.xs)
+    }
+
+    /// The end of the job, and the loudest thing here once there is anything to send.
+    ///
+    /// It appears with the first note rather than sitting disabled from the start.
+    /// A Send with nothing to send is a promise that fails, and this pull is small
+    /// enough that a dead control on it costs more than it explains.
+    private var sendButton: some View {
+        Button { Task { await model.send() } } label: {
+            Group {
+                if model.sendState == .sending {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "paperplane.fill")
                 }
-                .buttonStyle(LoupeButtonStyle(kind: model.tool == tool ? .primary : .quiet))
-                .accessibilityLabel(tool.accessibilityLabel)
-                .accessibilityAddTraits(model.tool == tool ? [.isSelected] : [])
             }
+            .frame(width: LoupeTheme.Hit.touch - LoupeTheme.Space.md,
+                   height: LoupeTheme.Hit.touch - LoupeTheme.Space.md)
         }
+        .buttonStyle(LoupeButtonStyle(kind: .primary))
+        .disabled(model.sendState == .sending || !canSend)
         .padding(LoupeTheme.Space.xs)
+        .accessibilityLabel(sendLabel)
+    }
+
+    /// A failure nothing can retry leaves the button off, so the only thing worth
+    /// doing is reading the reason in the drawer and fixing what it names. A rejected
+    /// credential will be rejected again, and a button that cannot succeed teaches
+    /// somebody it is a lie.
+    private var canSend: Bool {
+        if case .failed(_, let canRetry) = model.sendState { return canRetry }
+        return true
+    }
+
+    private var sendLabel: String {
+        switch model.sendState {
+        case .sending: return "Sending"
+        case .failed(_, let canRetry): return canRetry ? "Try again" : "Send failed"
+        case .sent(let n): return n == 1 ? "Sent 1 note" : "Sent \(n) notes"
+        case .idle:
+            return model.annotations.count == 1
+                ? "Send 1 note" : "Send \(model.annotations.count) notes"
+        }
+    }
+
+    /// The way out, on screen from the first moment.
+    ///
+    /// A cross rather than the word "Done". Read cold beside a list of notes, "Done"
+    /// means done with the note you just wrote - that was the first reaction of the
+    /// only person who looked at this panel without having helped build it, and
+    /// everyone who disagreed remembers deciding what it meant.
+    private var finishButton: some View {
+        Button { model.endAnnotating() } label: {
+            Image(systemName: "xmark")
+                .frame(width: LoupeTheme.Hit.touch - LoupeTheme.Space.md,
+                       height: LoupeTheme.Hit.touch - LoupeTheme.Space.md)
+        }
+        .buttonStyle(LoupeButtonStyle(kind: .quiet))
+        .padding(LoupeTheme.Space.xs)
+        .accessibilityLabel("Finish annotating")
     }
 
     private var drawerButton: some View {
         Button { model.toggleTray() } label: {
             VStack(spacing: LoupeTheme.Space.xs) {
-                // Says "drag me", which nothing else here did: "handler doesn't look
-                // like draggable btw". Horizontal bars on a pull that travels
-                // vertically - the grip runs across the direction of travel, the way
-                // every sheet grabber does.
-                Image(systemName: "line.3.horizontal")
-                    .font(LoupeTheme.Typography.note)
-                    .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
                 Image(systemName: model.trayExpanded ? "chevron.right" : "chevron.left")
                 Text("\(model.annotations.count)")
                     .font(LoupeTheme.Typography.label)
@@ -229,8 +296,8 @@ public struct OverlayRoot: View {
         // as two stacked panels rather than one pull with sections.
         .buttonStyle(LoupeButtonStyle(kind: .quiet))
         .accessibilityLabel(pullAccessibilityLabel)
-        .accessibilityHint("Slides the notes panel in and out. Drag it up or down to "
-                           + "move it off whatever is underneath.")
+        .accessibilityHint("Shows the notes you have taken. Drag the pull up or down "
+                           + "to move it off whatever is underneath.")
     }
 
     /// High priority, not a plain `.gesture`. The pull is a `Button`, and a button's
@@ -368,13 +435,10 @@ public struct OverlayRoot: View {
         if let dragged = model.dragRegion {
             DragRegionLayer(rect: rect(dragged))
         }
-        if let drawn = model.dragPath, drawn.count >= 2 {
-            DrawPathLayer(points: drawn)
-        }
 
         switch model.mode {
         case .picking(let hovered):
-            if model.dragRegion == nil, model.dragPath == nil, let hovered {
+            if model.dragRegion == nil, let hovered {
                 HighlightLayer(rect: rect(hovered.bounds),
                                badge: model.annotations.count + 1,
                                isPinned: false)
@@ -382,9 +446,8 @@ public struct OverlayRoot: View {
         case .commenting(let pick):
             // The pinned pick stays visible while a new shape is drawn over it, so
             // the previous note does not simply vanish mid-gesture.
-            HighlightLayer(rect: rect(pick.ref.bounds), badge: pick.index,
-                           isPinned: true, path: pick.ref.path)
-                .opacity(model.dragRegion == nil && model.dragPath == nil ? 1 : 0.35)
+            HighlightLayer(rect: rect(pick.ref.bounds), badge: pick.index, isPinned: true)
+                .opacity(model.dragRegion == nil ? 1 : 0.35)
         case .off, .browsing:
             EmptyView()
         }

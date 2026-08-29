@@ -82,8 +82,6 @@ ios() {
   shoot "$pad"   tray  07-ipad-tray.png
   shoot "$phone" tray  08-iphone-sheet.png
   shoot "$pad"   drag  09-ipad-drag-region.png
-  shoot "$pad"   lassoing 11-ipad-lassoing.png
-  shoot "$pad"   lasso    12-ipad-lasso.png
   rm -rf "$dd"
 }
 

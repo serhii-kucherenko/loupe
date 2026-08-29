@@ -105,11 +105,10 @@
         "kind": {
           "enum": [
             "view",
-            "region",
-            "path"
+            "region"
           ],
           "default": "view",
-          "description": "Whether the annotation is about a thing on screen, an area of it, or a shape drawn around several things. Absent means view: bundles written before this field existed still mean what they meant. A region carries bounds and usually nothing else, because nothing on screen corresponds to it. A path additionally carries path, and its bounds is the shape's bounding box."
+          "description": "Whether the annotation is about a thing on screen or an area of it. Absent means view: bundles written before this field existed still mean what they meant. A region carries bounds and usually nothing else, because nothing on screen corresponds to it."
         },
         "accessibilityID": {
           "type": "string"
@@ -132,20 +131,7 @@
         },
         "bounds": {
           "$ref": "#/$defs/rect",
-          "description": "In viewport coordinates. For a path, the shape's bounding box - which is what makes a reader that ignores path still correct."
-        },
-        "path": {
-          "type": "array",
-          "minItems": 3,
-          "items": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 2,
-            "items": {
-              "type": "number"
-            }
-          },
-          "description": "The drawn shape, as [x, y] pairs in viewport coordinates, closed implicitly. Only on kind path. Simplified before it is written (Ramer-Douglas-Peucker at about 2 points), so a slow drag does not ship hundreds of points sitting on top of each other. Fill using the even-odd rule: a hand-drawn shape crosses itself often."
+          "description": "In viewport coordinates."
         }
       }
     },

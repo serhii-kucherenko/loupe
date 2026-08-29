@@ -27,14 +27,6 @@ public final class OverlayModel: ObservableObject {
     /// until the drag ends.
     @Published public private(set) var dragRegion: Rect?
 
-    /// The shape being drawn right now, in window points.
-    ///
-    /// Separate from `dragRegion` rather than a shared "whatever is in progress",
-    /// because they are drawn differently and only one can be true at a time. Two
-    /// fields make the second fact impossible to get wrong; one field with a mode
-    /// beside it does not.
-    @Published public private(set) var dragPath: [Point]?
-
     /// What is typed into the open comment popover.
     ///
     /// On the model rather than in the popover's own `@State`, because an outside
@@ -56,13 +48,6 @@ public final class OverlayModel: ObservableObject {
     /// Someone who moved it off the thing they were trying to annotate should not
     /// have to move it again on the next pick.
     @Published public private(set) var handle = DrawerHandle()
-
-    /// Which gesture the person means to use, and what the tool control shows.
-    ///
-    /// It follows what they actually did rather than only what they chose: making a
-    /// region with Point lit moves it to Box. The control teaches by reflecting, and
-    /// nothing is ever refused for being the wrong tool.
-    @Published public private(set) var tool: PickTool = .point
 
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
@@ -161,18 +146,6 @@ public final class OverlayModel: ObservableObject {
     public func drag(to rect: Rect?) {
         guard mode.swallowsInput else { return }
         dragRegion = rect
-        dragPath = nil
-    }
-
-    /// The person is drawing a shape. Feedback only, same contract as `drag(to:)`.
-    ///
-    /// Not thinned on the way in. The dashed stroke has to follow the finger exactly
-    /// or the gesture feels like it is lagging; simplification happens once, on
-    /// release, where its only job is to keep the bundle small.
-    public func draw(to points: [Point]?) {
-        guard mode.swallowsInput else { return }
-        dragPath = points
-        dragRegion = nil
     }
 
     /// The person clicked an element. Pins it and opens the popover.
@@ -180,18 +153,6 @@ public final class OverlayModel: ObservableObject {
                      contextScreenshotPNG: Data? = nil,
                      screen: String? = nil, viewport: Rect? = nil) {
         guard case .picking = mode else { return }
-        // The control follows the gesture, never the other way round. Someone who
-        // drags a box while Point is lit has just told us which tool they meant, and
-        // refusing the pick to defend a segmented control would be absurd.
-        switch ref.kind {
-        case .region: tool = .box
-        case .path: tool = .draw
-        case .view:
-            // A tap under Draw is the way out of it, and it has to actually be the
-            // way out: leaving Draw lit after a tap-pick would put the next drag
-            // back into a shape nobody asked for.
-            tool = .point
-        }
         draftComment = ""
         draftTag = nil
         set(.commenting(PendingPick(ref: ref, screenshotPNG: screenshotPNG,
@@ -209,8 +170,18 @@ public final class OverlayModel: ObservableObject {
         set(.picking(hover: nil))
     }
 
-    /// Commits the comment and drops to browsing, so the app underneath is usable
-    /// again and you can walk to the next screen.
+    /// Commits the comment and goes straight back to picking.
+    ///
+    /// **Saving a note is not finishing.** It used to drop to `.browsing`, which is a
+    /// state with nothing on screen to say you are in it: the app stopped responding
+    /// to picks and the only way to carry on was "Pick another", inside a drawer that
+    /// starts shut. So "make annotations" - plural, which is the ordinary case -
+    /// meant finding a hidden button between every one of them. That is most of what
+    /// "you are a bit confusing in terms of the flow" was about.
+    ///
+    /// The cost is that the app underneath stays frozen after a save. That is the
+    /// honest reading of being in annotate mode, and the way out is now a cross on
+    /// the pull that is always on screen - which the old browsing state never had.
     @discardableResult
     public func saveComment(_ comment: String, tag: AnnotationTag?) -> Annotation? {
         guard case .commenting(let pick) = mode else { return nil }
@@ -232,7 +203,7 @@ public final class OverlayModel: ObservableObject {
         annotations = session.annotations
         draftComment = ""
         draftTag = nil
-        set(.browsing)
+        set(.picking(hover: nil))
         return annotation
     }
 
@@ -249,9 +220,6 @@ public final class OverlayModel: ObservableObject {
     }
 
     // MARK: - Tray
-
-    /// Chosen from the tool control.
-    public func use(_ tool: PickTool) { self.tool = tool }
 
     public func toggleTray() { trayExpanded.toggle() }
 
@@ -293,7 +261,11 @@ public final class OverlayModel: ObservableObject {
             pendingCount = queue?.pendingCount ?? 0
             sendState = .failed(message(for: error), canRetry: canRetry(error))
             // The tray is where the failure is readable and where Try again lives,
-            // so a failed send always ends up there, wherever it started from.
+            // so a failed send always ends up there, wherever it started from - and
+            // *open*, which it was not. `.browsing` behind a shut drawer put the
+            // reason somewhere nobody could see, which is the whole failure this
+            // project keeps finding in other clothes.
+            trayExpanded = true
             set(.browsing)
         }
     }
@@ -323,7 +295,6 @@ public final class OverlayModel: ObservableObject {
         // Any change of mode ends a drag. `drag(to:)` never comes through here, so
         // this cannot wipe the rectangle out from under the gesture that owns it.
         dragRegion = nil
-        dragPath = nil
         mode = new
         onModeChange?(new)
     }

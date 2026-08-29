@@ -11,39 +11,20 @@ struct HighlightLayer: View {
     /// nil while hovering, a number once the element is pinned.
     var badge: Int?
     var isPinned: Bool
-    /// The drawn shape, when the pick was one.
-    ///
-    /// Without it a lasso would be pinned with a rectangle around it - the overlay
-    /// showing back the exact thing the person went out of their way not to say. The
-    /// badge stays on the bounding box's corner either way, which is where it belongs
-    /// for both.
-    var path: [Point]?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if let path, path.count >= 3 {
-                // Solid and closed: committed. Dashed is what `DrawPathLayer` uses
-                // while the finger is still down, and that distinction is the only
-                // thing telling somebody whether the shape has been taken yet.
-                let shape = closed(path)
-                shape.fill(LoupeTheme.Colors.highlightFill.color,
-                           style: FillStyle(eoFill: true))
-                shape.stroke(LoupeTheme.Colors.highlight.color,
-                             style: StrokeStyle(lineWidth: LoupeTheme.Stroke.highlight,
-                                                lineCap: .round, lineJoin: .round))
-            } else {
-                RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight, style: .continuous)
-                    .fill(LoupeTheme.Colors.highlightFill.color)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight, style: .continuous)
-                            .strokeBorder(LoupeTheme.Colors.highlight.color,
-                                          lineWidth: LoupeTheme.Stroke.highlight)
-                    )
-                    .frame(width: rect.width, height: rect.height)
-                    .position(x: rect.midX, y: rect.midY)
-            }
+            RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight, style: .continuous)
+                .fill(LoupeTheme.Colors.highlightFill.color)
+                .overlay(
+                    RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight, style: .continuous)
+                        .strokeBorder(LoupeTheme.Colors.highlight.color,
+                                      lineWidth: LoupeTheme.Stroke.highlight)
+                )
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
 
             if let badge {
                 BadgeView(number: badge)
@@ -58,17 +39,6 @@ struct HighlightLayer: View {
                    value: rect)
         .accessibilityElement()
         .accessibilityLabel(isPinned ? "Picked element" : "Element under the pointer")
-    }
-
-    private func closed(_ points: [Point]) -> Path {
-        var path = Path()
-        guard let first = points.first else { return path }
-        path.move(to: CGPoint(x: first.x, y: first.y))
-        for point in points.dropFirst() {
-            path.addLine(to: CGPoint(x: point.x, y: point.y))
-        }
-        path.closeSubpath()
-        return path
     }
 }
 

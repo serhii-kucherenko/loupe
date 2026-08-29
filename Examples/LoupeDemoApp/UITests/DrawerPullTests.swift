@@ -16,8 +16,11 @@ final class DrawerPullTests: XCTestCase {
         app = XCUIApplication()
     }
 
+    /// Always from an empty tray. The tray survives the app being killed on purpose,
+    /// so without this one test that saves a note leaves every later test counting
+    /// "1 note" where it expected none - and the failure reads as a missing pull.
     private func launch(scene: String) {
-        app.launchArguments = ["scene=\(scene)"]
+        app.launchArguments = ["scene=\(scene)", "--fresh-session"]
         app.launch()
     }
 
@@ -46,12 +49,52 @@ final class DrawerPullTests: XCTestCase {
         XCTAssertTrue(shut.waitForExistence(timeout: 5))
         shut.tap()
 
-        XCTAssertTrue(app.buttons["Finish annotating"].waitForExistence(timeout: 3),
-                      "the drawer carries the way out of annotate mode")
+        // The settings are review, so they are inside. What is inside is what tells
+        // you the drawer is open.
+        let settings = app.buttons["Where notes are sent"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 3))
 
         pull(notes: 0, open: true).tap()
-        XCTAssertTrue(app.buttons["Finish annotating"].waitForNonExistence(timeout: 3),
-                      "and it shuts again")
+        XCTAssertTrue(settings.waitForNonExistence(timeout: 3), "and it shuts again")
+    }
+
+    /// The whole of the flow complaint: "enter the annotation mode, making
+    /// annotations, send it and close it". Two of those four steps used to be inside
+    /// a drawer that starts shut, so nobody could find the two that end the job.
+    func testTheWayOutIsOnScreenWithTheDrawerShut() {
+        launch(scene: "zero")
+        XCTAssertTrue(pull(notes: 0).waitForExistence(timeout: 5))
+
+        let finish = app.buttons["Finish annotating"]
+        XCTAssertTrue(finish.exists, "the way out cannot be behind the drawer")
+
+        // And it still works from here, without opening anything first.
+        finish.tap()
+        XCTAssertTrue(app.buttons["Start annotating"].waitForExistence(timeout: 3),
+                      "one tap out, the same as the one tap in")
+    }
+
+    /// Send is the other half of it, and it appears with the first note rather than
+    /// sitting disabled from the start: a Send with nothing to send is a promise that
+    /// fails, and this pull is too small to carry a dead control.
+    func testSendIsOnThePullOnceThereIsANoteToSend() {
+        launch(scene: "zero")
+        XCTAssertTrue(pull(notes: 0).waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Send 1 note"].exists)
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)).tap()
+
+        // By its placeholder, not `firstMatch` - the app has a search field of its
+        // own and `firstMatch` found that instead, then failed on a field nobody had
+        // focused. Matching what the person reads keeps the two honest.
+        let field = app.textFields["What is wrong with this?"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("the stock count is unreadable")
+        app.buttons["Save"].tap()
+
+        XCTAssertTrue(app.buttons["Send 1 note"].waitForExistence(timeout: 3),
+                      "Send has to be reachable without opening the drawer")
     }
 
     // MARK: - It moves
@@ -112,7 +155,10 @@ final class DrawerPullTests: XCTestCase {
         XCTAssertTrue(handle.waitForExistence(timeout: 5))
 
         handle.drag(dx: -200)
-        XCTAssertTrue(app.buttons["Finish annotating"].waitForExistence(timeout: 3),
+        // The settings, because they are inside. "Finish annotating" used to be the
+        // marker and it no longer is: it lives on the pull now and is there whether
+        // the drawer is open or shut, which is the whole point of moving it.
+        XCTAssertTrue(app.buttons["Where notes are sent"].waitForExistence(timeout: 3),
                       "pulling the drawer out should open it")
     }
 
