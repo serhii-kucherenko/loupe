@@ -191,8 +191,18 @@ public final class LinearSettingsFlow: ObservableObject {
     /// The destination goes too. A team id left behind a credential that no longer
     /// exists is the same lie as one left behind a credential that was refused: the
     /// panel reopens looking configured.
-    public func signOut() {
-        settings.clearCredential()
+    /// - Returns: `false` when the credential could not actually be removed, with
+    ///   `connection` carrying the reason. The panel must not draw a signed-out state
+    ///   on a `false`: a credential somebody believes they deleted and has not is
+    ///   worse than one they never tried to delete.
+    @discardableResult
+    public func signOut() -> Bool {
+        do {
+            try settings.clearCredential()
+        } catch {
+            connection = .failed(Self.readable(error))
+            return false
+        }
         settings.destination = nil
         credential = nil
         person = nil
@@ -202,6 +212,7 @@ public final class LinearSettingsFlow: ObservableObject {
         teamID = ""
         projectID = ""
         connection = .idle
+        return true
     }
 
     /// Stores whatever is now true, and says whether it took.

@@ -14,7 +14,7 @@ final class LinearSettingsTests: XCTestCase {
     }
 
     override func tearDown() {
-        settings.clearCredential()
+        try? settings.clearCredential()
         defaults.removePersistentDomain(forName: account)
         super.tearDown()
     }
@@ -33,8 +33,8 @@ final class LinearSettingsTests: XCTestCase {
         XCTAssertEqual(settings.credential(), .accessToken("oauth-token"))
     }
 
-    func testThereIsNoCredentialUntilOneIsSaved() {
-        settings.clearCredential()
+    func testThereIsNoCredentialUntilOneIsSaved() throws {
+        try settings.clearCredential()
         XCTAssertNil(settings.credential())
     }
 
@@ -42,14 +42,15 @@ final class LinearSettingsTests: XCTestCase {
         settings.destination = LinearDestination(teamID: "TEAM", projectID: "PROJ")
         try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_secret")) }
 
-        settings.clearCredential()
+        try settings.clearCredential()
 
         XCTAssertNil(settings.credential())
         XCTAssertEqual(settings.destination?.teamID, "TEAM")
     }
 
-    func testItRefusesToBuildATransportWithoutACredential() {
-        settings.clearCredential()
+    func testItRefusesToBuildATransportWithoutACredential() throws {
+        // Nothing to delete is success, so this is safe on a machine with no keychain.
+        try settings.clearCredential()
         XCTAssertThrowsError(try settings.transport()) { error in
             XCTAssertEqual(error as? LinearError, .notConfigured)
         }

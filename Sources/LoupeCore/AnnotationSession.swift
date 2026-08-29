@@ -100,10 +100,19 @@ public final class AnnotationSession {
     }
 
     private func restore() {
+        // No file at all is the ordinary case: a first run, or a tray already sent.
         guard let file, let data = try? Data(contentsOf: file) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let saved = try? decoder.decode(SavedTray.self, from: data) else { return }
+        // A file that exists and will not decode is a different thing entirely, and
+        // it is somebody's unsent notes. Left where it is rather than overwritten, so
+        // whatever is in it can still be recovered by hand; the alternative is losing
+        // it quietly on the next save.
+        guard let saved = try? decoder.decode(SavedTray.self, from: data) else {
+            assertionFailure("Loupe could not read the saved tray at \(file.path). "
+                             + "It has been left alone; the notes in it are not lost.")
+            return
+        }
         id = saved.sessionID
         annotations = saved.annotations
     }

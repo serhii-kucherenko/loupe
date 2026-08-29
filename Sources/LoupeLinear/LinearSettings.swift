@@ -51,9 +51,20 @@ public struct LinearSettings: @unchecked Sendable {
         guard status == errSecSuccess else { throw LinearError.couldNotStore(status) }
     }
 
-    @discardableResult
-    public func clearCredential() -> Bool {
-        SecItemDelete(baseQuery() as CFDictionary) == errSecSuccess
+    /// Removes the credential, or says why it could not.
+    ///
+    /// Throwing for the same reason `save` does: it returned a discardable `Bool` and
+    /// every caller discarded it, so a delete the Keychain refused left the
+    /// credential exactly where it was while the panel said signed out. A credential
+    /// somebody believes they removed and has not is worse than one they never
+    /// removed at all.
+    ///
+    /// Nothing there to delete counts as success. The point is that it is gone.
+    public func clearCredential() throws {
+        let status = SecItemDelete(baseQuery() as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw LinearError.couldNotStore(status)
+        }
     }
 
     // MARK: - Where notes go

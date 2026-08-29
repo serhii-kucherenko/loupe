@@ -43,9 +43,19 @@ public enum Loupe {
     ///
     /// Separate from `start` because a window rarely exists yet at the moment an app
     /// wants to begin recording, and the recorder should not wait for one.
+    /// - Returns: whether the overlay is now above that window. It is
+    ///   `@discardableResult` because most hosts have nothing useful to do with a
+    ///   failure - but a failure is not silent: attaching before `start` is a
+    ///   programmer error that otherwise produces an SDK which simply never appears,
+    ///   with nothing anywhere saying why. That is the single hardest kind of bug to
+    ///   find in something whose whole job is to be an overlay.
     @discardableResult
     public static func attach(to window: PlatformWindow) -> Bool {
-        guard let model else { return false }
+        guard let model else {
+            assertionFailure("Loupe.attach(to:) was called before Loupe.start(app:). "
+                             + "The overlay will not appear.")
+            return false
+        }
         // See OverlayWindow.swift: os(macOS) rather than canImport(AppKit), because
         // Catalyst can import AppKit and must still take the UIKit path.
         #if os(macOS)

@@ -47,9 +47,22 @@ public struct LinearOAuth: Sendable {
             self.verifier = verifier
         }
 
+        /// - Important: the result of `SecRandomCopyBytes` is checked, and that is
+        ///   not a formality. The buffer starts as 64 zeroes, so discarding the
+        ///   status meant a failure produced a *constant, publicly guessable*
+        ///   verifier while everything carried on working - and the verifier is the
+        ///   entire security of PKCE. An intercepted authorization code is only
+        ///   useless because the verifier cannot be guessed.
+        ///
+        ///   The fallback is Swift's own system generator rather than a throw. It
+        ///   cannot fail, and refusing to sign in at all would be a worse answer than
+        ///   using the other cryptographically secure source on the machine.
         public static func randomVerifier() -> String {
             var bytes = [UInt8](repeating: 0, count: 64)
-            _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+                var generator = SystemRandomNumberGenerator()
+                bytes = (0..<64).map { _ in UInt8.random(in: .min ... .max, using: &generator) }
+            }
             return Data(bytes).base64URLEncoded
         }
     }

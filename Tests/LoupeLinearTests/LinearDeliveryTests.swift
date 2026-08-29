@@ -29,7 +29,9 @@ final class LinearDeliveryTests: XCTestCase {
     }
 
     override func tearDown() {
-        settings().clearCredential()
+        // Best effort: a Keychain that refuses the delete is not this test failing,
+        // and there may be nothing there to delete in the first place.
+        try? settings().clearCredential()
         UserDefaults().removePersistentDomain(forName: account)
         super.tearDown()
     }

@@ -94,6 +94,39 @@ final class LinearOAuthTests: XCTestCase {
         XCTAssertTrue(sent.contains("code_verifier="))
         XCTAssertFalse(sent.contains("client_secret"))
     }
+
+    // MARK: - The verifier is the whole security of PKCE
+
+    /// The buffer starts as 64 zeroes and `SecRandomCopyBytes`'s status used to be
+    /// discarded, so a failure produced a constant, publicly guessable verifier while
+    /// everything else carried on working.
+    ///
+    /// `testEveryVerifierIsDifferent` above would already have caught a *total*
+    /// failure, since 50 identical verifiers is 50 identical verifiers. This names
+    /// the specific value, so an intermittent failure that still happened to produce
+    /// distinct values cannot slip past - and so the reason is written down next to
+    /// the assertion rather than inferred from a set count.
+    func testAVerifierIsNeverTheEmptyBuffer() {
+        // 64 zero bytes, base64url, unpadded. Spelled out rather than reached for
+        // through the fileprivate encoder, so a change there cannot make this test
+        // quietly agree with itself.
+        let zeroes = String(repeating: "A", count: 86)
+        for _ in 0..<32 {
+            XCTAssertNotEqual(LinearOAuth.Proof.randomVerifier(), zeroes)
+        }
+    }
+
+    /// The challenge's character set is checked above; the verifier's is not, and it
+    /// travels in a form body where padding and `+` would be just as wrong.
+    func testTheVerifierIsLongEnoughAndCarriesNothingThatNeedsEscaping() {
+        let verifier = LinearOAuth.Proof.randomVerifier()
+        // RFC 7636 puts the floor at 43 characters.
+        XCTAssertGreaterThanOrEqual(verifier.count, 43)
+        XCTAssertFalse(verifier.contains("="))
+        XCTAssertFalse(verifier.contains("+"))
+        XCTAssertFalse(verifier.contains("/"))
+    }
+
 }
 
 private final class Box: @unchecked Sendable {
