@@ -9,6 +9,8 @@ private final class FakeLinear: @unchecked Sendable {
     /// what was *not* sent as much as what was.
     var requests: [(url: URL, body: [String: Any])] = []
     var existingIssueIDs: [String] = []
+    /// The workspace's labels, as `issueLabels` nodes.
+    var labels: [[String: Any]] = []
     var status = 200
     var responseHeaders: [String: String] = [:]
 
@@ -29,6 +31,8 @@ private final class FakeLinear: @unchecked Sendable {
         let json: [String: Any]
         if query.contains("issues(filter") {
             json = ["data": ["issues": ["nodes": existingIssueIDs.map { ["id": $0] }]]]
+        } else if query.contains("issueLabels") {
+            json = ["data": ["issueLabels": ["nodes": labels]]]
         } else if query.contains("fileUpload") {
             json = ["data": ["fileUpload": ["success": true, "uploadFile": [
                 "uploadUrl": "https://uploads.example.com/signed",
@@ -300,5 +304,96 @@ final class LinearTransportTests: XCTestCase {
         } catch {
             XCTFail("expected a LinearError, got \(error)")
         }
+    }
+}
+
+// MARK: - The tag somebody picked has to reach the issue
+
+extension LinearTransportTests {
+
+    private func label(_ name: String, id: String, team: String? = nil) -> [String: Any] {
+        var node: [String: Any] = ["id": id, "name": name]
+        if let team { node["team"] = ["id": team] }
+        return node
+    }
+
+    private func created(_ linear: FakeLinear) -> [String: Any]? {
+        let create = linear.requests.first {
+            ($0.body["query"] as? String)?.contains("issueCreate") == true
+        }
+        return (create?.body["variables"] as? [String: Any])?["input"] as? [String: Any]
+    }
+
+    /// `bundle` tags everything `.bug`, and the workspace's own label is `Bug`.
+    /// That capital B is the whole reason this test exists: it is what a real
+    /// workspace looks like, and an exact-match lookup drops the tag against it.
+    func testATaggedNoteArrivesWithTheMatchingLabel() async throws {
+        let linear = FakeLinear()
+        linear.labels = [label("Bug", id: "label-bug")]
+
+        try await transport(linear).send(bundle(["the row is cut off"]))
+
+        XCTAssertEqual(created(linear)?["labelIds"] as? [String], ["label-bug"],
+                       "the tag is the one thing the person actually chose")
+    }
+
+    func testATagWithNoMatchingLabelIsSaidOnTheIssueRatherThanDropped() async throws {
+        let linear = FakeLinear()
+        linear.labels = [label("Improvement", id: "label-improvement")]
+
+        try await transport(linear).send(bundle(["the row is cut off"]))
+
+        let input = created(linear)
+        XCTAssertNil(input?["labelIds"], "never invent a label in somebody's workspace")
+        let description = input?["description"] as? String ?? ""
+        XCTAssertTrue(description.contains("Tagged **bug**"),
+                      "the choice still has to arrive: \(description)")
+    }
+
+    /// A round trip nobody needs is a round trip that can fail.
+    func testAnUntaggedBundleNeverAsksForLabels() async throws {
+        let linear = FakeLinear()
+        var untagged = bundle(["no tag on this one"])
+        untagged.annotations[0].tag = nil
+
+        try await transport(linear).send(untagged)
+
+        let lookups = linear.requests.filter {
+            ($0.body["query"] as? String)?.contains("issueLabels") == true
+        }
+        XCTAssertTrue(lookups.isEmpty)
+    }
+
+    func testTheLabelsAreReadOnceForTheWholeBundle() async throws {
+        let linear = FakeLinear()
+        linear.labels = [label("Bug", id: "label-bug")]
+
+        try await transport(linear).send(bundle(["first", "second", "third"]))
+
+        let lookups = linear.requests.filter {
+            ($0.body["query"] as? String)?.contains("issueLabels") == true
+        }
+        XCTAssertEqual(lookups.count, 1)
+    }
+
+    // MARK: - The matching rule itself, which is pure
+
+    func testATeamsOwnLabelBeatsAWorkspaceOneOfTheSameName() {
+        let labels = [
+            LinearLabel(id: "workspace", name: "bug", teamID: nil),
+            LinearLabel(id: "ours", name: "bug", teamID: "TEAM"),
+        ]
+        XCTAssertEqual(LinearLabel.id(for: .bug, in: labels, teamID: "TEAM"), "ours")
+    }
+
+    func testAWorkspaceLabelIsUsedWhenTheTeamHasNoneOfItsOwn() {
+        let labels = [LinearLabel(id: "workspace", name: "Bug", teamID: nil)]
+        XCTAssertEqual(LinearLabel.id(for: .bug, in: labels, teamID: "TEAM"), "workspace")
+    }
+
+    /// Another team's label is not Loupe's to use, and Linear refuses it anyway.
+    func testAnotherTeamsLabelIsNeverUsed() {
+        let labels = [LinearLabel(id: "theirs", name: "bug", teamID: "OTHER")]
+        XCTAssertNil(LinearLabel.id(for: .bug, in: labels, teamID: "TEAM"))
     }
 }

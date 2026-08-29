@@ -30,6 +30,7 @@ final class FakeLinearServer: @unchecked Sendable {
     private var _authorizations: [String] = []
     private var _assetURLs: [String] = []
     private var _searches = 0
+    private var _labels: [[String: String]] = []
     private var _rejectEverything = false
     private var port: UInt16 = 0
 
@@ -39,6 +40,14 @@ final class FakeLinearServer: @unchecked Sendable {
     var authorizations: [String] { lock.sync { _authorizations } }
     var assetURLs: [String] { lock.sync { _assetURLs } }
     var searches: Int { lock.sync { _searches } }
+
+    /// The workspace's labels, as `id`/`name` pairs. Team-scoped labels are not
+    /// modelled here: the choosing rule is proved by its own unit tests, and this
+    /// file exists to prove the wire, not the rule.
+    var labels: [[String: String]] {
+        get { lock.sync { _labels } }
+        set { lock.sync { _labels = newValue } }
+    }
 
     /// Answer everything with 401, the way a wrong key would.
     var rejectEverything: Bool {
@@ -176,6 +185,13 @@ final class FakeLinearServer: @unchecked Sendable {
             "assetUrl":"\(asset)",\
             "headers":[{"key":"x-linear-test","value":"echoed"}]}}}}
             """
+        }
+
+        if query.contains("issueLabels") {
+            let nodes = labels
+                .map { #"{"id":"\#($0["id"] ?? "")","name":"\#($0["name"] ?? "")"}"# }
+                .joined(separator: ",")
+            return #"{"data":{"issueLabels":{"nodes":[\#(nodes)]}}}"#
         }
 
         if query.contains("issueCreate") {

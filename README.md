@@ -26,8 +26,7 @@ you a fix. Loupe is the capture side of that.
 ## Straight into Linear
 
 Capture is half the job. `LoupeLinear` takes the other half: each note becomes its
-own Linear issue, in Triage, with both screenshots attached and the network trace in
-the body.
+own Linear issue, with both screenshots attached and the network trace in the body.
 
 ```swift
 Loupe.start(app: app, transport: LinearDelivery(keeping: FileTransport(directory: dir)))
@@ -43,6 +42,13 @@ are pickers, because nobody types a UUID on an iPad.
 yet, Send fails and says so - it does not quietly keep the note in a folder and tell
 you it was delivered. The local copy is always written first, so nothing is ever lost;
 only the reporting was ever in question.
+
+**The tag you pick becomes a Linear label, when your workspace already has one of
+that name.** Matching ignores case, so `bug` finds `Bug`. Loupe never creates a
+label: your labels are your taxonomy, and filing a note from an iPad is not the
+moment to add to it. When nothing matches, the tag is written into the issue body as
+a sentence instead - so the choice still arrives, and you can add the label yourself
+if you want it to stick next time.
 
 **One issue per note, never one per batch** - a session's notes are unrelated to each
 other. Sending is safe to repeat: a note whose issue already exists is a no-op, so a

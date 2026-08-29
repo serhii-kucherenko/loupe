@@ -10,6 +10,9 @@ public struct IssueDraft: Equatable, Sendable {
     public var title: String
     public var description: String
     public var labelName: String?
+    /// The Linear label the tag matched, when the workspace has one. Resolved by
+    /// the transport, because only the workspace can answer it.
+    public var labelID: String?
     /// The annotation this came from. Written into the body so a retry can find it
     /// again rather than creating a second issue.
     public var annotationID: UUID
@@ -24,11 +27,19 @@ public extension IssueDraft {
     /// - Parameter assets: asset URLs for this annotation's images, once uploaded.
     ///   Absent is normal rather than exceptional: a region pick on the web has no
     ///   crop at all.
-    init(annotation: Annotation, bundle: AnnotationBundle, assets: Assets = Assets()) {
+    /// - Parameter labelID: the label the tag matched, or nil when nothing matched.
+    ///   nil is the default because most callers - the tests, the docs, anything
+    ///   that has not asked Linear yet - genuinely do not know.
+    init(annotation: Annotation,
+         bundle: AnnotationBundle,
+         assets: Assets = Assets(),
+         labelID: String? = nil) {
         annotationID = annotation.id
         title = Self.title(from: annotation.comment)
         labelName = annotation.tag?.rawValue
-        description = Self.body(annotation: annotation, bundle: bundle, assets: assets)
+        self.labelID = labelID
+        description = Self.body(annotation: annotation, bundle: bundle,
+                                assets: assets, matchedALabel: labelID != nil)
     }
 
     struct Assets: Equatable, Sendable {
@@ -60,8 +71,17 @@ public extension IssueDraft {
 
     private static func body(annotation: Annotation,
                              bundle: AnnotationBundle,
-                             assets: Assets) -> String {
+                             assets: Assets,
+                             matchedALabel: Bool) -> String {
         var out: [String] = [annotation.comment, ""]
+
+        // Somebody chose this on the iPad. If the workspace has no label of that
+        // name, the choice still has to arrive - as a sentence, since it could not
+        // arrive as a label. Dropping it would be the quietest kind of lie.
+        if let tag = annotation.tag, !matchedALabel {
+            out += ["Tagged **\(tag.rawValue)** - this workspace has no label of "
+                    + "that name, so none was set.", ""]
+        }
 
         if let crop = assets.crop { out += ["![The element](\(crop))", ""] }
         if let context = assets.context { out += ["![Where it sits](\(context))", ""] }
