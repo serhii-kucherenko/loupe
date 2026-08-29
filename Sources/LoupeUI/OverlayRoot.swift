@@ -114,6 +114,95 @@ public struct OverlayRoot: View {
     @ViewBuilder
     private func pull(in size: CGSize) -> some View {
         let height = size.height
+        VStack(spacing: 0) {
+            // On the pull, not inside the drawer. The complaint was that nothing said
+            // drag-select existed - and a control that only appears once you have
+            // opened a drawer is not findable by somebody who does not know the
+            // drawer has anything in it.
+            if case .picking = model.mode {
+                toolControl
+                Divider()
+                    .overlay(LoupeTheme.Colors.line.color)
+                    .padding(.horizontal, LoupeTheme.Space.xs)
+            }
+            drawerButton
+        }
+        // Sized to its contents before it is placed. `.position` proposes the whole
+        // parent to its child, so without this the pull's panel filled the screen -
+        // a white slab over the app with the buttons floating on its edge.
+        .fixedSize()
+        .loupePanel()
+        // No label on the container. It holds three separate buttons now, and a label
+        // here made the whole column answer to the drawer button's name as well - two
+        // elements with one name, ambiguous to VoiceOver and to anything driving the
+        // app. Each button carries its own. Same mistake as SER-685, one level up.
+        .loupeInteractive()
+        .position(x: pullX(in: size), y: pullY(in: size))
+        .highPriorityGesture(dragToMoveOrOpen(in: size))
+        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
+                                              reduceMotion: reduceMotion),
+                   value: model.handle)
+        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
+                                              reduceMotion: reduceMotion),
+                   value: model.trayExpanded)
+
+        hint(in: size)
+    }
+
+    /// What the current tool means, in words, beside the pull.
+    ///
+    /// **Never interactive.** It carries no `.loupeInteractive()` and refuses hit
+    /// testing outright, so unlike every other thing Loupe draws it can sit over the
+    /// app without making anything underneath unpickable. That is the whole reason a
+    /// hint is affordable here at all.
+    @ViewBuilder
+    private func hint(in size: CGSize) -> some View {
+        if case .picking = model.mode, !model.trayExpanded {
+            Text(model.tool.hint)
+                .font(LoupeTheme.Typography.note)
+                .foregroundStyle(LoupeTheme.Colors.ink.color)
+                .lineLimit(1)
+                .padding(.horizontal, LoupeTheme.Space.sm)
+                .padding(.vertical, LoupeTheme.Space.xs)
+                // An explicit width, and sized before it is placed. `.position` makes
+                // a view fill its parent and then centres it, so a `.fixedSize` after
+                // it does nothing at all - which turned this label into an empty
+                // white slab across the middle of the screen.
+                .frame(width: hintWidth)
+                .loupePanel()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .position(x: pullX(in: size)
+                            - LoupeTheme.Hit.touch / 2
+                            - LoupeTheme.Space.sm
+                            - hintWidth / 2,
+                          y: pullY(in: size))
+        }
+    }
+
+    /// Enough for the longer of the two hints at the note size, so the label sits
+    /// clear of the pull rather than under it.
+    private var hintWidth: CGFloat { 190 }
+
+    /// Point or Box. Lit is what the next gesture is expected to be, not what it is
+    /// allowed to be - both gestures work whichever is lit.
+    private var toolControl: some View {
+        VStack(spacing: LoupeTheme.Space.xs) {
+            ForEach(PickTool.allCases, id: \.self) { tool in
+                Button { model.use(tool) } label: {
+                    Image(systemName: tool.symbol)
+                        .frame(width: LoupeTheme.Hit.touch - LoupeTheme.Space.md,
+                               height: LoupeTheme.Hit.touch - LoupeTheme.Space.md)
+                }
+                .buttonStyle(LoupeButtonStyle(kind: model.tool == tool ? .primary : .quiet))
+                .accessibilityLabel(tool.accessibilityLabel)
+                .accessibilityAddTraits(model.tool == tool ? [.isSelected] : [])
+            }
+        }
+        .padding(LoupeTheme.Space.xs)
+    }
+
+    private var drawerButton: some View {
         Button { model.toggleTray() } label: {
             VStack(spacing: LoupeTheme.Space.xs) {
                 // Says "drag me", which nothing else here did: "handler doesn't look
@@ -130,47 +219,40 @@ public struct OverlayRoot: View {
             }
             .padding(.vertical, LoupeTheme.Space.sm)
         }
-        .buttonStyle(LoupeButtonStyle(kind: .secondary))
-        .loupePanel()
+        // Quiet, because the pull's own panel is already the surface. A bordered
+        // button inside it drew a second rounded rectangle and the whole thing read
+        // as two stacked panels rather than one pull with sections.
+        .buttonStyle(LoupeButtonStyle(kind: .quiet))
         .accessibilityLabel(pullAccessibilityLabel)
         .accessibilityHint("Slides the notes panel in and out. Drag it up or down to "
                            + "move it off whatever is underneath.")
-        .loupeInteractive()
-        .position(x: pullX(in: size), y: pullY(in: size))
-        // High priority, not a plain `.gesture`. The pull is a `Button`, and a
-        // button's own tap recogniser will otherwise win a race it should lose: a
-        // quick flick was swallowed roughly half the time, which is exactly the
-        // gesture someone makes when they want the thing out of the way *now*.
-        // Below the minimum distance nothing here fires at all, so the tap still
-        // works.
-        .highPriorityGesture(
-            // Has to travel before it counts, or a tap on the pull would be read as
-            // the beginning of a move.
-            DragGesture(minimumDistance: LoupeTheme.Space.md)
-                .onChanged { dragOffset = $0.translation }
-                .onEnded { value in
-                    dragOffset = .zero
-                    // Away from the trailing edge means open. It is the direction the
-                    // drawer would travel, so it is the one the pull should answer to.
-                    if value.translation.width < -openThreshold,
-                       abs(value.translation.width) > abs(value.translation.height) {
-                        model.setTrayExpanded(true)
-                    } else if value.translation.width > openThreshold,
-                              abs(value.translation.width) > abs(value.translation.height) {
-                        model.setTrayExpanded(false)
-                    } else {
-                        model.moveHandle(toFraction: DrawerHandle.fraction(
-                            forY: model.handle.centreY(in: height) + value.translation.height,
-                            in: height))
-                    }
+    }
+
+    /// High priority, not a plain `.gesture`. The pull is a `Button`, and a button's
+    /// own tap recogniser will otherwise win a race it should lose: a quick flick was
+    /// swallowed roughly half the time, which is exactly the gesture someone makes
+    /// when they want the thing out of the way *now*. Below the minimum distance
+    /// nothing here fires at all, so the taps still work.
+    private func dragToMoveOrOpen(in size: CGSize) -> some Gesture {
+        // Has to travel before it counts, or a tap on the pull would be read as the
+        // beginning of a move.
+        DragGesture(minimumDistance: LoupeTheme.Space.md)
+            .onChanged { dragOffset = $0.translation }
+            .onEnded { value in
+                dragOffset = .zero
+                // Away from the trailing edge means open. It is the direction the
+                // drawer would travel, so it is the one the pull should answer to.
+                let sideways = abs(value.translation.width) > abs(value.translation.height)
+                if sideways, value.translation.width < -openThreshold {
+                    model.setTrayExpanded(true)
+                } else if sideways, value.translation.width > openThreshold {
+                    model.setTrayExpanded(false)
+                } else {
+                    model.moveHandle(toFraction: DrawerHandle.fraction(
+                        forY: model.handle.centreY(in: size.height) + value.translation.height,
+                        in: size.height))
                 }
-        )
-        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
-                                              reduceMotion: reduceMotion),
-                   value: model.handle)
-        .animation(LoupeTheme.Motion.resolved(LoupeTheme.Motion.panel,
-                                              reduceMotion: reduceMotion),
-                   value: model.trayExpanded)
+            }
     }
 
     /// Where the pull sits horizontally: against the screen's edge when the drawer is

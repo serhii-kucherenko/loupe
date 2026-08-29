@@ -25,6 +25,11 @@ final class OverlayChromeTests: XCTestCase {
         ElementRef(accessibilityID: id, bounds: Rect(x: 0, y: 0, width: 10, height: 10))
     }
 
+    private func region(_ id: String) -> ElementRef {
+        ElementRef(kind: .region, accessibilityID: id,
+                   bounds: Rect(x: 0, y: 0, width: 40, height: 40))
+    }
+
     private func saveANote(_ m: OverlayModel, _ text: String = "a note") {
         m.pick(ref("row"))
         m.saveComment(text, tag: nil)
@@ -89,6 +94,74 @@ final class OverlayChromeTests: XCTestCase {
 
         XCTAssertEqual(m.mode, .off)
         XCTAssertFalse(m.trayExpanded)
+    }
+
+    // MARK: - The tool control says what exists, and never traps you
+
+    func testTheToolStartsAtPoint() {
+        let m = model()
+        m.beginAnnotating()
+        XCTAssertEqual(m.tool, .point)
+    }
+
+    func testChoosingAToolSelectsIt() {
+        let m = model()
+        m.beginAnnotating()
+        m.use(.box)
+        XCTAssertEqual(m.tool, .box)
+    }
+
+    /// The whole reason it does not lock: a control someone can get stuck in the
+    /// wrong side of is worse than the missing signpost it replaced.
+    func testATapStillPicksAnElementWhileBoxIsSelected() {
+        let m = model()
+        m.beginAnnotating()
+        m.use(.box)
+
+        m.pick(ref("row"))
+
+        guard case .commenting(let pick) = m.mode else {
+            return XCTFail("a tap must still pick, whatever the control says")
+        }
+        XCTAssertEqual(pick.ref.kind, .view)
+    }
+
+    func testADragStillMakesARegionWhilePointIsSelected() {
+        let m = model()
+        m.beginAnnotating()
+        m.use(.point)
+
+        m.pick(region("area"))
+
+        guard case .commenting(let pick) = m.mode else {
+            return XCTFail("a drag must still make a region, whatever the control says")
+        }
+        XCTAssertEqual(pick.ref.kind, .region)
+    }
+
+    /// It teaches by reflecting rather than instructing. Somebody who drags a box
+    /// while Point is lit has just said which tool they meant.
+    func testTheControlFollowsWhatYouActuallyDid() {
+        let m = model()
+        m.beginAnnotating()
+        XCTAssertEqual(m.tool, .point)
+
+        m.pick(region("area"))
+        XCTAssertEqual(m.tool, .box, "a region pick means Box")
+
+        m.cancelComment()
+        m.pick(ref("row"))
+        XCTAssertEqual(m.tool, .point, "and an element pick means Point again")
+    }
+
+    func testEveryToolSaysWhatItDoesInWords() {
+        for tool in PickTool.allCases {
+            XCTAssertFalse(tool.hint.isEmpty, "\(tool) needs a hint - that is the point")
+            XCTAssertFalse(tool.title.isEmpty)
+            XCTAssertFalse(tool.symbol.isEmpty)
+            XCTAssertTrue(tool.accessibilityLabel.contains(tool.title),
+                          "the spoken label should name the tool: \(tool.accessibilityLabel)")
+        }
     }
 
     // MARK: - The pull moves along the edge

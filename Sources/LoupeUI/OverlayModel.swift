@@ -49,6 +49,13 @@ public final class OverlayModel: ObservableObject {
     /// have to move it again on the next pick.
     @Published public private(set) var handle = DrawerHandle()
 
+    /// Which gesture the person means to use, and what the tool control shows.
+    ///
+    /// It follows what they actually did rather than only what they chose: making a
+    /// region with Point lit moves it to Box. The control teaches by reflecting, and
+    /// nothing is ever refused for being the wrong tool.
+    @Published public private(set) var tool: PickTool = .point
+
     @Published public private(set) var annotations: [Annotation] = []
     @Published public private(set) var sendState: SendState = .idle
 
@@ -153,6 +160,10 @@ public final class OverlayModel: ObservableObject {
                      contextScreenshotPNG: Data? = nil,
                      screen: String? = nil, viewport: Rect? = nil) {
         guard case .picking = mode else { return }
+        // The control follows the gesture, never the other way round. Someone who
+        // drags a box while Point is lit has just told us which tool they meant, and
+        // refusing the pick to defend a segmented control would be absurd.
+        tool = ref.kind == .region ? .box : .point
         draftComment = ""
         draftTag = nil
         set(.commenting(PendingPick(ref: ref, screenshotPNG: screenshotPNG,
@@ -210,6 +221,9 @@ public final class OverlayModel: ObservableObject {
     }
 
     // MARK: - Tray
+
+    /// Chosen from the tool control.
+    public func use(_ tool: PickTool) { self.tool = tool }
 
     public func toggleTray() { trayExpanded.toggle() }
 

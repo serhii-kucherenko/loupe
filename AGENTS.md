@@ -56,6 +56,15 @@ contract: additive changes only, no breaking renames without a major.
   case in `Examples/LoupeDemoApp/UITests`**, which runs on a real simulated iPad in CI.
   Name a slow velocity on synthetic drags: XCUITest's default moves the touch in so few
   events that SwiftUI can miss the gesture, and that flakiness hides real bugs.
+  **A UI run that times out or restarts mid-suite is usually a wedged simulator, not
+  your code** - `Restarting after unexpected exit, crash, or test timeout` in the log,
+  a `testmanagerd` snapshot timeout, or a run that takes an hour instead of two
+  minutes. `xcrun simctl shutdown` then `boot` clears it. Do not go looking for a
+  gesture bug first; both agents on this project have lost time to it.
+  **One label per element, never one on the container.** A label on a stack that holds
+  buttons makes two things answer to one name, and XCUITest fails with "multiple
+  matching elements" rather than anything that names the cause. Same mistake as
+  SER-685, one level up.
 - **Nothing Loupe draws may sit over the app while picking.** Anything with a
   `.loupeInteractive()` region *takes* the touches that land on it, so a panel in the
   way is not merely ugly - whatever is under it cannot be annotated, which is the one
@@ -88,6 +97,11 @@ contract: additive changes only, no breaking renames without a major.
   accessible name, or identifier exists at the UIKit level. Verified by probe on an iPad
   simulator. Do not go looking for it again. The crop and the context shot carry the
   meaning there, which is why both are always captured.
+- **Adding a file to `Sources/` and getting "cannot find type X in scope" from
+  `Examples/LoupeDemo`?** That is a stale `.build`, not your code. SwiftPM misses a new
+  source file in a path dependency. `rm -rf Examples/LoupeDemo/.build` and build again.
+  It has cost two debugging detours already, and the error it produces points at
+  perfectly good code.
 - Never use `instanceof` on DOM types in `web/`. An element inside an iframe is from
   another realm and the check silently fails. Check `tagName` or duck-type instead.
 - **Every screenshot is of this repo's own demo app. Never of a host that adopted
