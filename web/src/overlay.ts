@@ -1,9 +1,14 @@
-import type { Annotation, AnnotationTag, ElementRef, Rect } from "./types.js";
+import type {
+  Annotation, AnnotationTag, ElementRef, PathPoint, Rect,
+} from "./types.js";
 import { uuid } from "./types.js";
+
+/** Which gesture is meant. Mirrors `PickTool` in the Swift SDK, name for name. */
+export type PickTool = "point" | "box" | "draw";
 import type { AnnotationSession } from "./session.js";
 import type { QueuedTransport } from "./transport.js";
 import {
-  MINIMUM_REGION_SIZE, elementRef, pick as pickElement, regionRef,
+  MINIMUM_REGION_SIZE, elementRef, pathRef, pick as pickElement, regionRef,
 } from "./picker.js";
 
 /**
@@ -164,11 +169,41 @@ export class Overlay {
   pickRegion(rect: Rect): void {
     this.resolveDraftAndResumePicking();
     if (this.mode.kind !== "picking") return;
+    this.tool = "box";
     const ref = regionRef(rect, {
       width: this.view.innerWidth,
       height: this.view.innerHeight,
     });
     if (!ref) return;
+    this.setMode({
+      kind: "commenting",
+      pick: { ref, index: this.session.count + 1 },
+    });
+  }
+
+  /**
+   * A drawn shape.
+   *
+   * A stroke that encloses nothing is a pointer that slipped, or a swipe, and it
+   * becomes the click it was always going to be. Refusing would lose the gesture
+   * entirely and explain nothing.
+   */
+  pickPath(drawn: PathPoint[]): void {
+    this.resolveDraftAndResumePicking();
+    if (this.mode.kind !== "picking") return;
+
+    const ref = pathRef(drawn, {
+      width: this.view.innerWidth,
+      height: this.view.innerHeight,
+    });
+    const first = drawn[0];
+    if (!ref) {
+      // Back to a click, and out of Draw - leaving it lit would put the next drag
+      // straight back into a shape nobody asked for.
+      this.tool = "point";
+      if (first) void this.pickAt(first[0], first[1]);
+      return;
+    }
     this.setMode({
       kind: "commenting",
       pick: { ref, index: this.session.count + 1 },
@@ -297,6 +332,19 @@ export class Overlay {
    */
   /** The rectangle being dragged out right now, in viewport coordinates. */
   private dragRect?: Rect;
+  /** The shape being drawn right now, unthinned so the line sits under the pointer. */
+  private dragPath?: PathPoint[];
+
+  /**
+   * Which gesture is meant.
+   *
+   * `point` and `box` are predictions: a click picks and a drag makes a rectangle
+   * whichever is lit, and the control moves to match what you did. `draw` is the one
+   * that decides, because a drawn shape and a dragged rectangle are the same gesture
+   * and nothing in the pointer says which. That makes it the only tool somebody can
+   * be stuck in, so a click always still picks and always leaves it.
+   */
+  private tool: PickTool = "point";
 
   private updatePageListeners(): void {
     this.pageListeners.forEach((off) => off());
@@ -324,10 +372,20 @@ export class Overlay {
       if (this.isOurs(event.target as Node)) return;
       origin = { x: event.clientX, y: event.clientY };
       dragged = false;
+      // Draw records from the first pixel, or the top of every stroke is missing.
+      // Box waits for a threshold, or a click that moves two pixels becomes a
+      // rectangle nobody meant. Same event, two different questions.
+      this.dragPath = this.tool === "draw" ? [[event.clientX, event.clientY]] : undefined;
     };
 
     const onDragMove = (event: MouseEvent) => {
       if (!origin) return;
+      if (this.tool === "draw") {
+        dragged = true;
+        this.dragPath = [...(this.dragPath ?? []), [event.clientX, event.clientY]];
+        this.render();
+        return;
+      }
       const rect = between(origin, { x: event.clientX, y: event.clientY });
       if (!dragged && rect.width < MINIMUM_REGION_SIZE && rect.height < MINIMUM_REGION_SIZE) {
         return;
@@ -341,6 +399,12 @@ export class Overlay {
       const start = origin;
       origin = undefined;
       if (!start || !dragged) return;
+      if (this.tool === "draw") {
+        const drawn = [...(this.dragPath ?? []), [event.clientX, event.clientY]] as PathPoint[];
+        this.dragPath = undefined;
+        this.pickPath(drawn);
+        return;
+      }
       this.dragRect = undefined;
       this.pickRegion(between(start, { x: event.clientX, y: event.clientY }));
     };
@@ -388,6 +452,24 @@ export class Overlay {
     return { x: 0, y: 0, width: this.view.innerWidth, height: this.view.innerHeight };
   }
 
+  /**
+   * A closed shape, as an SVG overlay sized to the viewport.
+   *
+   * SVG rather than a canvas: it scales, it needs no redraw on resize, and the
+   * even-odd fill rule the format documents is one attribute. A hand-drawn shape
+   * crosses itself constantly, and winding would fill the crossings solid.
+   */
+  private pathShape(points: PathPoint[], className: string): Element {
+    const svg = this.doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", className);
+    svg.setAttribute("aria-hidden", "true");
+    const polygon = this.doc.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("points", points.map(([x, y]) => `${x},${y}`).join(" "));
+    polygon.setAttribute("fill-rule", "evenodd");
+    svg.append(polygon);
+    return svg;
+  }
+
   // MARK: - Drawing
 
   private render(): void {
@@ -412,7 +494,13 @@ export class Overlay {
       }));
     }
 
-    const highlighted = this.dragRect ? undefined
+    // Dashed, exactly like the rectangle: a solid outline is what a committed pick
+    // looks like, and the two must never be confused.
+    if (this.dragPath && this.dragPath.length >= 2) {
+      this.root.append(this.pathShape(this.dragPath, "drag-path"));
+    }
+
+    const highlighted = this.dragRect || this.dragPath ? undefined
       : this.mode.kind === "picking" ? this.mode.hover
       : this.mode.kind === "commenting" ? this.mode.pick.element
       : undefined;
@@ -422,7 +510,12 @@ export class Overlay {
       this.root.append(...this.highlight(highlighted, index));
     }
 
-    if (this.mode.kind === "commenting" && !this.mode.pick.element) {
+    // A committed shape draws itself, not a rectangle around itself. Pinning a lasso
+    // inside a box would be the overlay showing back the one thing the gesture
+    // refused to say.
+    if (this.mode.kind === "commenting" && this.mode.pick.ref.path) {
+      this.root.append(this.pathShape(this.mode.pick.ref.path, "path-shape"));
+    } else if (this.mode.kind === "commenting" && !this.mode.pick.element) {
       // A committed region has no element to outline, so it draws its own.
       const r = this.mode.pick.ref.bounds;
       this.root.append(
@@ -546,9 +639,39 @@ export class Overlay {
     return panel;
   }
 
+  /** What each tool is called and what it means, in the fewest true words. */
+  private static readonly TOOLS: ReadonlyArray<{
+    tool: PickTool; glyph: string; label: string;
+  }> = [
+    { tool: "point", glyph: "\u25CE", label: "Point: click an element" },
+    { tool: "box", glyph: "\u2B1A", label: "Box: drag a rectangle" },
+    { tool: "draw", glyph: "\u2941", label: "Draw: trace a shape around several things" },
+  ];
+
+  /** The gesture you can make, on screen. Nothing said so, and lasso does not exist
+   * until something does: an undiscoverable mode is the same as a missing one. */
+  private tools(): Element {
+    const group = this.element("div", { class: "tools", role: "group",
+                                        "aria-label": "Selection tool" });
+    for (const { tool, glyph, label } of Overlay.TOOLS) {
+      const button = this.element("button", {
+        class: this.tool === tool ? "tool on" : "tool",
+        "aria-label": label,
+        "aria-pressed": String(this.tool === tool),
+      }, glyph);
+      button.addEventListener("click", () => {
+        this.tool = tool;
+        this.render();
+      });
+      group.append(button);
+    }
+    return group;
+  }
+
   private hint(): Element {
     const panel = this.element("div", { class: "panel hint" });
     const count = this.session.count;
+    if (this.mode.kind === "picking") panel.append(this.tools());
     panel.append(this.doc.createTextNode(
       count === 0 ? "Point at something that looks wrong."
         : count === 1 ? "1 note · point at another"

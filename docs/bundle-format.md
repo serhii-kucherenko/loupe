@@ -160,10 +160,18 @@ a grid. The shape is the answer to that.
   ignore `path` entirely and you get exactly the rectangle a drag would have given
   you. A missing field degrades quality, never correctness.
 
-The crop PNG for a path is the bounding box with everything outside the shape masked
-out, composited onto the theme's paper colour - so the picture shows what was circled
+On Apple platforms the crop PNG for a path is the bounding box with everything
+outside the shape replaced by `loupe.cutaway` - so the picture shows what was circled
 and not what was deliberately gone around. The context shot is the whole window with
 the shape stroked on it, the same as for the other two kinds.
+
+**The web SDK sends no crop for a path, and none for a region either.** It captures
+by cloning an element into an SVG `foreignObject`, and neither a region nor a shape
+has an element to clone. It is worse for a shape than for a region: even a
+bounding-box crop taken some other way would be a rectangle, which is the exact thing
+the person went out of their way not to say, so a picture would contradict the
+gesture rather than merely be missing. `bounds` plus `path` is what a shape offers
+there, and that is enough to draw it over a screenshot taken any other way.
 
 ### `trace[]`
 

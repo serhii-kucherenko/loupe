@@ -27,7 +27,15 @@ export interface Rect {
  * A region is not a failed pick. Two controls misaligned with each other, the
  * padding around a group, the gap between two rows: none of those is an element.
  */
-export type ElementKind = "view" | "region";
+/**
+ * A `path` is a shape somebody drew. It says the one thing a rectangle cannot:
+ * *these things, and not the things between them*. A box around two controls at
+ * opposite corners of a card takes in everything between them and means nothing.
+ */
+export type ElementKind = "view" | "region" | "path";
+
+/** A point on the page, as `[x, y]` in viewport coordinates. */
+export type PathPoint = [number, number];
 
 export interface ElementRef {
   /** Absent means `view`, so a bundle written before this existed still means what it meant. */
@@ -39,8 +47,16 @@ export interface ElementRef {
   selector?: string;
   sourceFile?: string;
   sourceLine?: number;
-  /** In viewport coordinates, top-left origin. */
+  /** In viewport coordinates, top-left origin. For a `path`, the shape's bounding box. */
   bounds: Rect;
+  /**
+   * The drawn shape, closed implicitly, filled with the even-odd rule. `path` only.
+   *
+   * Pairs rather than objects: a shape is hundreds of points and `{"x":…,"y":…}`
+   * spends four times the bytes repeating two key names. Simplified before it is
+   * sent, so a slow drag does not ship points that sit on top of each other.
+   */
+  path?: PathPoint[];
 }
 
 export interface NetworkEvent {

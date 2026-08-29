@@ -35,11 +35,16 @@ public struct Point: Codable, Sendable, Equatable {
 /// times and drift.
 public enum LoupePath {
 
-    /// Below this, a drag is somebody's finger slipping rather than a shape.
+    /// The smallest area a shape can enclose and still mean something, in square
+    /// window points. A 20pt square.
     ///
-    /// Matched to the drag-a-box threshold, because they are the same judgement: a
-    /// gesture this small said nothing about where on screen the person meant.
-    public static let leastUsefulSize: Double = 20
+    /// **Area, not the bounding box, and that distinction is the whole rule.** A
+    /// lasso says "the things inside this". A straight swipe has a bounding box a
+    /// hundred points wide and encloses nothing at all, so by any box measure it is a
+    /// fine shape and by the only measure that matters it is empty - and the crop it
+    /// produces is a rectangle of blank ground. Every single-segment gesture is that
+    /// swipe, which is to say: most accidents.
+    public static let leastUsefulArea: Double = 20 * 20
 
     /// Ramer-Douglas-Peucker, in window points.
     ///
@@ -99,17 +104,31 @@ public enum LoupePath {
 
     /// Whether this is a shape or a mis-fire.
     ///
-    /// A tap that moved a little inside draw mode is the common case, and it must not
-    /// become a note with a crop of nothing. The caller falls back to picking the
-    /// element under the first point, which is what the person almost certainly
-    /// meant - rather than refusing, which loses the gesture entirely.
+    /// A tap that moved a little, and a swipe that went straight across, are both
+    /// common inside draw mode and neither must become a note with a crop of blank
+    /// ground. The caller falls back to picking the element under the first point,
+    /// which is what the person almost certainly meant - rather than refusing, which
+    /// would lose the gesture entirely and explain nothing.
+    ///
+    /// No bounding-box test here on purpose. A shape drawn down a column of rows is
+    /// tall and narrow and completely valid, so neither side can carry a minimum;
+    /// what it must have is an inside.
     public static func isUsable(_ points: [Point]) -> Bool {
         guard points.count >= 3 else { return false }
-        let box = bounds(points)
-        // Either side, not both: a long thin shape drawn down a column of rows is a
-        // perfectly good selection, and requiring width *and* height would throw it
-        // away.
-        return box.width >= leastUsefulSize || box.height >= leastUsefulSize
+        return area(points) >= leastUsefulArea
+    }
+
+    /// The area the closed shape encloses, by the shoelace formula. Always positive:
+    /// which way round somebody drew is not information.
+    public static func area(_ points: [Point]) -> Double {
+        guard points.count >= 3 else { return 0 }
+        var sum = 0.0
+        var j = points.count - 1
+        for i in 0..<points.count {
+            sum += (points[j].x + points[i].x) * (points[j].y - points[i].y)
+            j = i
+        }
+        return abs(sum) / 2
     }
 
     /// Whether a point is inside the closed shape, by the even-odd rule.

@@ -160,7 +160,13 @@ public struct OverlayRoot: View {
             Text(model.tool.hint)
                 .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.ink.color)
-                .lineLimit(1)
+                // Two, not one. Draw is the only tool somebody can be stuck in, so
+                // its hint has to carry the way out as well as the way in - and at
+                // one line that sentence arrived as "Draw around what looks wro…",
+                // which cuts off exactly the half nobody can guess.
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, LoupeTheme.Space.sm)
                 .padding(.vertical, LoupeTheme.Space.xs)
                 // An explicit width, and sized before it is placed. `.position` makes

@@ -48,6 +48,30 @@ export function overlayCSS(): string {
   pointer-events: none;
 }
 
+/* A drawn shape, both states. The dashed/solid language is the same one the
+   rectangle uses, and it is the only thing telling somebody whether the shape has
+   been taken yet. Even-odd fill, because a hand-drawn shape crosses itself often and
+   winding would fill the crossings solid. */
+.drag-path,
+.path-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.drag-path polygon,
+.path-shape polygon {
+  fill: var(--loupe-highlight-fill);
+  stroke: var(--loupe-highlight);
+  stroke-width: var(--loupe-stroke-highlight);
+  stroke-linejoin: round;
+}
+
+.drag-path polygon { stroke-dasharray: 6 4; }
+
 .highlight {
   position: absolute;
   border: var(--loupe-stroke-highlight) solid var(--loupe-highlight);
@@ -203,6 +227,29 @@ button:not(:disabled):active { transform: translateY(1px); }
   padding: var(--loupe-space-sm) var(--loupe-space-md);
   color: var(--loupe-ink-soft);
   font-size: var(--loupe-font-body);
+}
+
+/* Point, Box, Draw. Two of the three gestures already worked and nothing on screen
+   said so, which reads as one mode with a hidden second one. */
+.tools {
+  display: flex;
+  gap: var(--loupe-space-xs);
+  margin-right: var(--loupe-space-xs);
+}
+
+button.tool {
+  min-width: var(--loupe-hit-pointer);
+  padding: var(--loupe-space-xs) var(--loupe-space-sm);
+  border-color: transparent;
+  color: var(--loupe-ink-soft);
+  font-size: var(--loupe-font-body);
+  line-height: 1;
+}
+
+button.tool.on {
+  background: var(--loupe-action);
+  border-color: var(--loupe-action);
+  color: var(--loupe-surface);
 }
 
 .item {

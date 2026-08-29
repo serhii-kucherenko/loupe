@@ -271,10 +271,16 @@ struct TrayRow: View {
 
             if let png = annotation.screenshotPNG, let image = Image(loupePNG: png) {
                 Button { onPreview(png) } label: {
+                    // Fit, not fill. Most crops are a row: six hundred points wide
+                    // and forty tall. Filled into a square that shows the middle
+                    // forty by forty, which for a row is the blank gap between the
+                    // name and the price - so every note looks the same and the
+                    // thumbnail stops doing the one job it has.
                     image
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                         .frame(width: thumbnailSize, height: thumbnailSize)
+                        .background(LoupeTheme.Colors.cutaway.color)
                         .clipShape(RoundedRectangle(cornerRadius: LoupeTheme.Radius.highlight,
                                                     style: .continuous))
                         .overlay(

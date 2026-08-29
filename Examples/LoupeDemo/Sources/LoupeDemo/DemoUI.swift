@@ -42,11 +42,18 @@ struct Columns<Leading: View, Trailing: View>: View {
     }
 }
 
-/// A minimum width a narrow screen is allowed to ignore.
+/// A width a column would like, which it gives up when there is not room.
 ///
-/// A plain `.frame(minWidth:)` is a promise the layout cannot keep on a phone: the
-/// content is forced wider than the screen and simply runs off the left edge. Found
-/// on an iPhone, where "Stock" read "tock" and the search field started off-screen.
+/// A plain `.frame(minWidth:)` is a promise the layout cannot keep: two columns
+/// asking for 460 and 320 want 780 points, and an iPad mini in portrait has 744. The
+/// `HStack` honours both minimums, overflows, and gets centred - so *both* edges are
+/// clipped. Every iPad screenshot in the README had the left pane's padding sliced
+/// off and the pick badge half outside the screen, and it read as a Loupe bug rather
+/// than a demo one.
+///
+/// It was already known on a phone, where "Stock" read "tock", but the guard was hung
+/// on the compact size class - and an iPad mini in portrait is regular. The size class
+/// was never the question. Whether the columns fit is.
 extension View {
     func columnWidth(_ width: CGFloat) -> some View { modifier(ColumnWidth(width: width)) }
 }
@@ -63,7 +70,11 @@ private struct ColumnWidth: ViewModifier {
 
     func body(content: Content) -> some View {
         if isWide {
-            content.frame(minWidth: width)
+            // Ideal, not minimum. SwiftUI shares the space in proportion to the
+            // ideals when there is enough and shrinks both when there is not, which
+            // is what a column should do. A minimum cannot be negotiated, and an
+            // unnegotiable minimum on a screen too small for it is an overflow.
+            content.frame(idealWidth: width, maxWidth: .infinity, alignment: .leading)
         } else {
             content.frame(maxWidth: .infinity, alignment: .leading)
         }

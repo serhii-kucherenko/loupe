@@ -237,6 +237,24 @@ and solid once it is yours:
 |---|---|
 | ![Dragging on the web](docs/screenshots/10-web-dragging.png) | ![A region on iPad](docs/screenshots/09-ipad-drag-region.png) |
 
+Or draw around them. A rectangle around two controls at opposite corners of a card
+takes in everything between them and says nothing; a shape says *these, and not the
+things between them*. The crop keeps what you circled and blanks out what you went
+around, so the picture cannot contradict the gesture:
+
+Dashed while you draw it, solid once it is yours - the same language the rectangle
+uses:
+
+| | |
+|---|---|
+| ![Drawing a shape on iPad](docs/screenshots/11-ipad-lassoing.png) | ![The shape, taken](docs/screenshots/12-ipad-lasso.png) |
+
+Point, Box and Draw sit on the drawer's pull, so the gesture you can make is always
+on screen. Point and Box are only predictions - drag a box with Point lit and you get
+a box - because a tap and a drag cannot be mistaken for each other. Draw is the one
+that decides, since a drawn shape and a dragged rectangle are the same gesture. A tap
+still picks in every tool, and leaves Draw.
+
 On an iPad the drawer is a side panel; on an iPhone it becomes a bottom sheet:
 
 | | |

@@ -109,12 +109,41 @@ final class PathTests: XCTestCase {
         XCTAssertFalse(LoupePath.isUsable([Point(x: 0, y: 0), Point(x: 200, y: 200)]))
     }
 
-    /// A shape drawn down a column of rows is tall and narrow and completely valid.
-    /// Requiring width *and* height would throw away one of the cases this feature
-    /// exists for.
+    /// A shape drawn down a column of rows is tall and narrow and completely valid,
+    /// so neither side can carry a minimum. What it must have is an inside.
     func testALongThinShapeIsAShape() {
-        let column = [Point(x: 100, y: 0), Point(x: 105, y: 200), Point(x: 95, y: 400)]
+        let column = [Point(x: 100, y: 0), Point(x: 130, y: 10), Point(x: 128, y: 400),
+                      Point(x: 98, y: 390)]
         XCTAssertTrue(LoupePath.isUsable(column))
+    }
+
+    /// The one every single-segment gesture produces, and therefore most accidents.
+    /// Its bounding box is a hundred points wide and it encloses nothing at all, so
+    /// any box measure calls it a fine shape and the crop comes out blank.
+    func testAStraightSwipeEnclosesNothingAndIsNotAShape() {
+        let swipe = line(from: Point(x: 40, y: 300), to: Point(x: 340, y: 300), steps: 30)
+        XCTAssertFalse(LoupePath.isUsable(swipe))
+
+        let diagonal = line(from: Point(x: 0, y: 0), to: Point(x: 200, y: 200), steps: 30)
+        XCTAssertFalse(LoupePath.isUsable(diagonal),
+                       "a diagonal has a big box and no inside either")
+    }
+
+    func testAreaIsTheSameWhicheverWayRoundItWasDrawn() {
+        let clockwise = [Point(x: 0, y: 0), Point(x: 100, y: 0),
+                         Point(x: 100, y: 50), Point(x: 0, y: 50)]
+        XCTAssertEqual(LoupePath.area(clockwise), 5000, accuracy: 0.001)
+        XCTAssertEqual(LoupePath.area(clockwise.reversed()), 5000, accuracy: 0.001)
+    }
+
+    /// A hand-drawn circle is the actual case, and it must clear the bar comfortably
+    /// rather than by a hair.
+    func testACircleSomebodyDrewIsAShape() {
+        XCTAssertTrue(LoupePath.isUsable(
+            circle(centre: Point(x: 200, y: 200), radius: 30, points: 60)))
+        XCTAssertFalse(LoupePath.isUsable(
+            circle(centre: Point(x: 200, y: 200), radius: 8, points: 60)),
+            "a circle the size of a fingertip is a tap that wobbled")
     }
 
     // MARK: - Which things were circled

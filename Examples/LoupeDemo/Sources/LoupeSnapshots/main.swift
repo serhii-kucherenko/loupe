@@ -122,8 +122,12 @@ enum Scene: String, CaseIterable {
                                 width: frame.width, height: frame.height))
     }
 
+    /// - Parameter crop: a real picture of a rectangle of the app, so a note in the
+    ///   drawer carries the thumbnail a real note would. Without it the tray shot
+    ///   showed rows of text while the README beside it promised a thumbnail, which
+    ///   is the sort of quiet disagreement nobody notices until they run the thing.
     @MainActor
-    func model() -> OverlayModel {
+    func model(crop: (Rect) -> Data? = { _ in nil }) -> OverlayModel {
         struct Noop: Transport { func send(_ bundle: AnnotationBundle) async throws {} }
         let model = OverlayModel(
             session: AnnotationSession(app: AppInfo(name: "Northgate Supply", platform: "macOS"),
@@ -139,12 +143,12 @@ enum Scene: String, CaseIterable {
         case .comment:
             model.pick(row, screen: "/search")
         case .tray:
-            model.pick(row, screen: "/search")
+            model.pick(row, screenshotPNG: crop(row.bounds), screen: "/search")
             model.saveComment("clearing the search leaves the old results on screen", tag: .bug)
             model.resumePicking()
-            model.pick(Self.ref(HostLayout.basket, id: "cart.empty",
-                                label: "Your basket is empty"),
-                       screen: "/cart")
+            let basket = Self.ref(HostLayout.basket, id: "cart.empty",
+                                  label: "Your basket is empty")
+            model.pick(basket, screenshotPNG: crop(basket.bounds), screen: "/cart")
             model.saveComment("the empty basket gives you nowhere to go from here", tag: .polish)
             // Asked for, because the drawer no longer opens itself. Saving a note
             // used to change the layout under somebody's hands.
@@ -156,9 +160,48 @@ enum Scene: String, CaseIterable {
 
 // MARK: - Rendering
 
+/// The app with nothing drawn over it, so notes can carry real crops of it.
+///
+/// A separate first pass, because the model has to be built before the window that
+/// would be its source. Rendering twice is cheaper than every other way of getting a
+/// truthful picture into a thumbnail.
+@MainActor
+func hostOnly(appearance: NSAppearance) -> CGImage? {
+    let window = NSWindow(contentRect: NSRect(origin: .zero, size: HostLayout.size),
+                          styleMask: [.borderless], backing: .buffered, defer: false)
+    window.appearance = appearance
+    window.contentView = NSHostingView(rootView: HostApp { EmptyView() })
+    window.orderBack(nil)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+    defer { window.close() }
+
+    guard let content = window.contentView,
+          let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+        return nil
+    }
+    content.cacheDisplay(in: content.bounds, to: rep)
+    return rep.cgImage
+}
+
+/// One rectangle of that picture, as a PNG.
+///
+/// `bounds` counts down from the top like every rectangle Loupe deals in, and so does
+/// a `CGImage`, so this is a scale and nothing else - no flip. The scale is real: the
+/// bitmap is at the display's backing scale and the rectangle is in points.
+func cut(_ image: CGImage, to bounds: Rect) -> Data? {
+    let scaleX = Double(image.width) / HostLayout.size.width
+    let scaleY = Double(image.height) / HostLayout.size.height
+    let box = CGRect(x: bounds.x * scaleX, y: bounds.y * scaleY,
+                     width: bounds.width * scaleX, height: bounds.height * scaleY)
+    guard box.width >= 1, box.height >= 1,
+          let piece = image.cropping(to: box) else { return nil }
+    return NSBitmapImageRep(cgImage: piece).representation(using: .png, properties: [:])
+}
+
 @MainActor
 func capture(_ scene: Scene, appearance: NSAppearance, to url: URL) {
-    let model = scene.model()
+    let host = hostOnly(appearance: appearance)
+    let model = scene.model { bounds in host.flatMap { cut($0, to: bounds) } }
     let window = NSWindow(contentRect: NSRect(origin: .zero, size: HostLayout.size),
                           styleMask: [.borderless], backing: .buffered, defer: false)
     window.appearance = appearance
