@@ -1,9 +1,17 @@
 # Loupe - agent instructions
 
-`project_tracker: linear`
+`project_tracker: github`
 
-The ordered list of work lives in the [Linear project](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084).
-Do not create a ROADMAP.md or a plans directory here: two lists mean two truths and both rot.
+**Everything coming in - bugs, ideas, questions, from anyone - is a
+[GitHub issue](https://github.com/serhii-kucherenko/loupe/issues).** That is the only
+inbox this project has. File there, triage there, close there.
+
+Do not create a ROADMAP.md or a plans directory here: two lists mean two truths and
+both rot.
+
+The maintainer keeps a private Linear project for his own sequencing. It is not a
+second inbox and nothing public should link to it - a stranger who clicks a Linear
+link gets a login wall, which reads as a project that does not want them.
 
 ## What this is
 An annotation SDK compiled into the dev/staging build of a host app. **Two SDKs, one
@@ -56,6 +64,22 @@ contract: additive changes only, no breaking renames without a major.
   the theme built clean here and failed CI's macOS job in eleven places at once. If a
   value is read from `body`, reach for a lock rather than an actor: a lock means the
   same thing on every toolchain. `LoupeTheme.appearance` is the worked example.
+- **`docs/agent-install.md` is compiled, not just read.**
+  `bash scripts/check-install-guide.sh` builds what the guide tells an adopter to
+  write, and fails if the guide and the check have drifted apart. It caught a snippet
+  that did not compile the day it was written. A wrong install page is the most
+  expensive kind of wrong: read once, by somebody with no way to tell whether the
+  mistake is theirs.
+- **`CHANGELOG.md` is generated.** `bash scripts/changelog.sh`, from the GitHub
+  releases. Never hand-edit it - edit the release on GitHub and run the script.
+- **Nothing that identifies a person ever goes into a bundle.**
+  `python3 scripts/check-nothing-identifying.py`. A bundle is written to be pasted:
+  into a Linear issue, a pull request, a public repository. Loupe says which *model*
+  the note came from, on what OS, at what screen size. It never says whose device it
+  was - no `UIDevice.current.name`, no `identifierForVendor`, no user agent, no
+  locale. Every one of those is one autocomplete away from an API Loupe legitimately
+  uses and produces a bundle that looks completely normal, which is why it is a lint
+  and not a review note.
 - **A colour, font or radius outside `LoupeTheme.swift` is a build failure.**
   `python3 scripts/check-theme-literals.py`. A host app can hand Loupe its own tokens,
   and that promise is only as good as the weakest call site: one hardcoded orange and

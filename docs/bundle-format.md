@@ -79,6 +79,33 @@ single padded image half-answers both. Either may be absent.
 | `commitSHA` | string | no | **The most useful field on this object.** It is how an agent checks out the code that produced the screenshot. |
 | `platform` | string | yes | `macOS`, `iOS`, `iPadOS`, `web`, `electron`. Open set: treat an unknown value as a string, not an error. |
 | `environment` | string | no | Defaults to `staging`. Loupe is not meant to ship to production users. |
+| `device` | object | no | Which machine and which screen. Filled in by the SDK; a host never passes it. |
+
+#### `app.device`
+
+| Field | Type | Guaranteed | Meaning |
+|---|---|---|---|
+| `identifier` | string | no | Model identifier, `iPad8,3`. Apple platforms only. The precise field: a reader can look it up. |
+| `name` | string | no | Marketing name, `iPad Pro 11-inch`. From an exact-match table. |
+| `osVersion` | string | no | The point release only, `26.5`. The platform's own name is already `app.platform`, so it is not repeated - one value, one place. |
+| `screen` | object | no | `width`, `height` in points and `scale`. **The whole screen**, not the window. |
+
+**An absent `name` means Loupe has not been taught that model, never that the model is
+unknown** - `identifier` says exactly what the machine was. Loupe will not guess a name
+from a prefix: a wrong device in a bug report sends somebody to reproduce a layout bug
+on hardware that is not the hardware, which is worse than a blank field.
+
+**`screen` and `viewport` are different things, and the gap between them is the point.**
+`app.device.screen` is the display; `annotations[].viewport` is the window the app had.
+When the viewport is smaller, the app was in Split View, Slide Over, or a resized
+window - which explains a whole class of "it looks wrong" reports and is completely
+invisible in a screenshot cropped to the app. `LoupeLinear` says so in a sentence on the
+issue rather than leaving a reader to notice two numbers disagree; if you write your own
+consumer, do the same.
+
+On the web only `screen` is present. The browser has no non-identifying way to say which
+machine it is on, and parsing a user agent for it would be guessing and fingerprinting at
+the same time.
 
 ### `annotations[]`
 
@@ -188,7 +215,12 @@ for a in bundle["annotations"]:
 ## What this format deliberately does not carry
 
 - **No user identity.** No account id, no email, no device id. A bundle is about a build,
-  not a person.
+  not a person. `app.device` says which *model* the note came from, never whose device it
+  was: no name somebody chose for their iPad, no `identifierForVendor`, no advertising
+  identifier, no user agent, no locale, no timezone. This one is enforced rather than
+  intended - `scripts/check-nothing-identifying.py` fails Loupe's build on the APIs that
+  would break it, because every one of them is one autocomplete away from an API Loupe
+  legitimately uses and produces a bundle that looks completely normal.
 - **No request or response bodies.** Only method, URL, status and duration. Bodies are
   where secrets live, and a URL is enough to find the endpoint in source.
 - **No full page source.** The element reference plus a crop, not a DOM dump.
@@ -199,3 +231,23 @@ for a in bundle["annotations"]:
 
 If you need any of that, it belongs in your own intake service, added on top - not in the
 format everybody else has to trust.
+
+## What a bundle *does* carry, and why it decides where you run this
+
+The list above is about fields. The pictures are the other half, and they are not
+filtered: **a screenshot is whatever was on screen.** If the app was showing a real
+customer's name, that name is now in the bundle, and the bundle is on its way to a
+ticket somebody will paste into a pull request.
+
+That is not a bug to fix - a capture tool that redacted the screen would be useless -
+but it does decide where Loupe belongs:
+
+- **Run it against seeded or synthetic data.** A staging app pointed at a scrubbed
+  database is the case Loupe was built for.
+- **Staging pointed at production data is a decision, not a default.** If you do it,
+  the people annotating need to know that what is on screen is what gets filed.
+- **Never in a build a real user can reach.** Loupe is DEBUG-only for this reason among
+  others, and `docs/agent-install.md` makes "no Loupe code runs in production" a gate.
+
+The `trace` is filtered on purpose - method, URL, status and duration, never bodies,
+because bodies are where tokens live. The pictures cannot be.

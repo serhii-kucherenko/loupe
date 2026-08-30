@@ -4,3 +4,6 @@
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# Bundles from a local intake run. Working notes, not source.
+.loupe/

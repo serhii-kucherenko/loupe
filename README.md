@@ -38,6 +38,21 @@ paste a personal API key or sign in with Linear. The credential goes to the Keyc
 The workspace is shown, because a credential belongs to exactly one; team and project
 are pickers, because nobody types a UUID on an iPad.
 
+**Read this before you connect a workspace: Linear cannot scope this narrowly.**
+Filing an issue through OAuth requires the `write` scope, which is **account-wide and
+permanent** - not "create issues", not "this team", not "this project". Linear's whole
+scope list is `read`, `write`, `issues:create`, `comments:create`,
+`timeSchedule:write`, `admin`, and `issues:create` alone is refused at `issueCreate`
+(measured, not assumed: the token authenticated, listed teams and projects, and was
+refused with `Invalid scope: 'write' required`).
+
+A personal API key is no narrower - it carries whatever the person carries. So the
+honest recommendation for a team is: **make a Linear user for it, invite that user to
+the one team you want notes in, and use its key.** Then the blast radius is a bot with
+one team, not whoever set it up. If that is more than you want to grant, use
+`FileTransport` or your own intake endpoint and leave `LoupeLinear` out - `LoupeCore`
+has no idea it exists.
+
 **A send that did not reach Linear never reports success.** If Linear is not set up
 yet, Send fails and says so - it does not quietly keep the note in a folder and tell
 you it was delivered. The local copy is always written first, so nothing is ever lost;
@@ -72,6 +87,13 @@ LoupeLinear.enable(oauth: LinearOAuth(clientID: "…", redirectURI: "yourapp://l
 A client id is public - PKCE is what removes the need for a secret, so none ships in
 your binary. Leave `oauth` out and the panel offers the API key field alone.
 
+**`LoupeLinear` is Apple-only, and that is Linear's doing rather than a gap here.**
+Linear's Content Security Policy blocks the signed upload `PUT` from browser
+JavaScript, so a web page cannot attach the screenshots even though it can create the
+issue - and an issue without the picture is most of the value gone. A web app sends to
+its own intake endpoint instead, and that service files into Linear server-side, where
+no CSP applies.
+
 `LoupeCore` has no idea any of this exists. A host that wants capture only never
 takes the product.
 
@@ -88,10 +110,8 @@ the capture without adopting the loop. Autopilot can equally take input from any
 
 | | What it is | Where |
 |---|---|---|
-| **Loupe** | the annotation SDK, in your app | this repo · [Linear](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084) |
-| **Autopilot** | the loop the bundles feed | https://github.com/serhii-kucherenko/autopilot · [Linear](https://linear.app/serhii-kucherenko/project/autopilot-0e1846433181) |
-
-Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
+| **Loupe** | the annotation SDK, in your app | this repo |
+| **Autopilot** | the loop the bundles feed | https://github.com/serhii-kucherenko/autopilot |
 
 ## Install
 
@@ -209,7 +229,15 @@ needs the second, and one padded image half-answers both.
 
 Each annotation carries your comment, the element reference (accessibility id, label,
 class, CSS selector on the web, on-screen bounds), the recent network events, any error
-logs, and which screen you were on. The whole contract is written down in
+logs, which screen you were on, and which machine it was: the model, the point release,
+and the size of the screen. When the window was smaller than the screen the issue says
+so in words, because "it looks wrong" in Split View is invisible in a screenshot cropped
+to the app.
+
+**Which machine, never whose.** No name somebody chose for their iPad, no vendor or
+advertising identifier, no user agent, no locale. A bundle is written to be pasted into
+a ticket or a public repository, so that is a promise rather than a preference, and a
+lint in CI fails the build on the APIs that would break it. The whole contract is written down in
 [`docs/bundle-format.md`](docs/bundle-format.md) - you can write a consumer in any
 language from that page alone.
 
@@ -346,7 +374,11 @@ The [bundle format](docs/bundle-format.md) is version 1 and has a
 [JSON Schema](docs/bundle-format.schema.json). Adding a field is safe; renaming or
 removing one is not.
 
-See the [Linear project](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084).
+**Bugs, ideas and questions go to
+[GitHub issues](https://github.com/serhii-kucherenko/loupe/issues).** That is the only
+inbox for this project - there is no private queue you are missing, and no form to
+fill in beyond the template. A report that names the platform, the version, and what
+you expected instead is already a good one.
 
 ## Licence
 

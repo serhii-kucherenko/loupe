@@ -127,6 +127,16 @@ omit it and nothing changes.
 `endpoint` is a URL you own. **Point it at the repository you are working in**, so a bundle
 lands as files you can read.
 
+**The fastest version, if the project has a server you would rather not touch yet:**
+
+```sh
+npx loupe-intake --dir .loupe     # http://127.0.0.1:7423/loupe/intake
+```
+
+One file, no dependencies, writes the same shape as everything else. Use it to prove
+the loop works end to end, then move to the handler below once you want it inside the
+app the team already runs.
+
 Next.js App Router — `app/loupe/intake/route.ts`:
 
 ```ts
@@ -261,8 +271,8 @@ and then the overlay stops looking like a visitor sitting in the middle of it:
 ```swift
 Loupe.start(app: app, theme: LoupeTheme.Appearance(
     accent: .init(light: .init(hex: 0x4338CA), dark: .init(hex: 0xA5B4FC)),
-    panelRadius: 28,
-    label: .headline))
+    label: .headline,
+    panelRadius: 28))
 ```
 
 **Look for the host's tokens before writing values by hand.** A `DESIGN.md`, a
@@ -365,9 +375,36 @@ A missing field degrades quality, never correctness.
    `Loupe.start`, no `Loupe.attach`, no `NetworkRecorder.install()` outside one.
    Nothing observes anything, no window is created, and no behaviour ships.
 
-   To remove the symbols too, the host needs a build configuration or target that
-   omits the package dependency entirely. Say so rather than pretending the guard
-   does it.
+   **A script for this, which you copy into the host repository** rather than running
+   from Loupe: [`scripts/check-host-guard.sh`](../scripts/check-host-guard.sh). It
+   answers the two questions separately, because mixing them up is the whole trap.
+
+   ```sh
+   bash check-host-guard.sh .                        # can Loupe run?  exits 1 if not guarded
+   bash check-host-guard.sh . build/MyApp.app/MyApp  # and how many symbols are in there
+   ```
+
+   #### Removing the symbols
+
+   Only question 1 is a gate. If the host also wants the symbols gone, guarding cannot
+   do it - **the dependency has to be absent from the build rather than guarded inside
+   it.** In order of what actually happens in real projects:
+
+   1. **The host already has a staging target.** Link `LoupeUI` (and `LoupeLinear`)
+      from that target only, and leave the production target with no Loupe dependency
+      at all. Nothing else to do; this is the whole answer when it applies.
+   2. **One target, and the host is willing to add one.** Duplicate the app target as
+      `<App> Staging`, add the package products there, and put the Loupe call sites
+      behind that target's own compilation condition (`STAGING`) rather than `DEBUG`.
+      More setup than 1, same result.
+   3. **One target, and the host is not willing to add one.** Then the symbols stay,
+      and that is a defensible place to stop: nothing can reach them, no window is
+      created, and no behaviour ships. **Say this to the host plainly instead of
+      leaving it looking like an unfinished job** - it is a size trade-off, not a bug.
+
+   What does *not* work, so nobody spends an afternoon on it: a per-configuration
+   setting on a single target. Xcode links a package product per target, not per
+   configuration, so there is no `Debug`-only checkbox to find.
 
    One trap while checking: a Debug build puts the app's own code in
    `<App>.debug.dylib`, so grepping the main binary of a Debug build finds nothing

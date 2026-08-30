@@ -134,3 +134,70 @@ extension IssueDraftTests {
                        "the label itself is on the issue, so the sentence would be noise")
     }
 }
+
+// MARK: - Which device, which screen, and whether it was the whole screen
+
+extension IssueDraftTests {
+
+    private func iPad(screen w: Double, _ h: Double) -> AppInfo {
+        AppInfo(name: "Demo", version: "1.2.0", commitSHA: "abc1234",
+                platform: "iPadOS", environment: "staging",
+                device: DeviceInfo(identifier: "iPad8,3",
+                                   name: "iPad Pro 11-inch",
+                                   osVersion: "26.5",
+                                   screen: DeviceInfo.Screen(width: w, height: h, scale: 2)))
+    }
+
+    private func note(viewport: Rect?, app: AppInfo) -> IssueDraft {
+        var annotation = self.annotation("the row is cut off")
+        annotation.viewport = viewport
+        return IssueDraft(annotation: annotation,
+                          bundle: AnnotationBundle(sessionID: UUID(), app: app,
+                                                   annotations: [], sentAt: Date()))
+    }
+
+    func testTheDeviceAndScreenAreInTheBody() {
+        let body = note(viewport: nil, app: iPad(screen: 1194, 834)).description
+
+        XCTAssertTrue(body.contains("iPad Pro 11-inch (`iPad8,3`)"), body)
+        XCTAssertTrue(body.contains("1194\u{00d7}834 @2x"), body)
+    }
+
+    /// Joined for reading, stored apart so the two halves cannot come to disagree.
+    func testThePointReleaseIsOnThePlatformRow() {
+        let body = note(viewport: nil, app: iPad(screen: 1194, 834)).description
+        XCTAssertTrue(body.contains("| platform | iPadOS 26.5 |"), body)
+    }
+
+    /// The line the whole field exists for. A screenshot cropped to the app cannot
+    /// show Split View, so the cause of the report arrives invisible.
+    func testAWindowSmallerThanTheScreenIsSaidInWords() {
+        let split = Rect(x: 0, y: 0, width: 507, height: 834)
+        let body = note(viewport: split, app: iPad(screen: 1194, 834)).description
+
+        XCTAssertTrue(body.contains("not using the whole screen"), body)
+        XCTAssertTrue(body.contains("Split View or Slide Over"), body)
+        XCTAssertTrue(body.contains("507\u{00d7}834pt of 1194\u{00d7}834pt"), body)
+    }
+
+    func testAFullScreenWindowSaysNothingExtra() {
+        let whole = Rect(x: 0, y: 0, width: 1194, height: 834)
+        let body = note(viewport: whole, app: iPad(screen: 1194, 834)).description
+
+        XCTAssertFalse(body.contains("not using the whole screen"),
+                       "the ordinary case is not worth a sentence")
+    }
+
+    /// A host on 0.1.3 that passed its own `AppInfo` has no device at all. The body
+    /// has to read as a sentence rather than grow an empty row.
+    func testABundleWithNoDeviceIsUnchanged() {
+        let plain = AppInfo(name: "Demo", platform: "web")
+        let body = note(viewport: Rect(x: 0, y: 0, width: 800, height: 600), app: plain)
+            .description
+
+        XCTAssertTrue(body.contains("| platform | web |"), body)
+        XCTAssertFalse(body.contains("| device |"), body)
+        XCTAssertFalse(body.contains("| screen |"), body)
+        XCTAssertFalse(body.contains("not using the whole screen"), body)
+    }
+}

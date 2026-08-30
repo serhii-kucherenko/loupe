@@ -74,6 +74,37 @@ sitting on your page - and it is why this option exists at all.
 Loupe's, because they are hit targets as much as type. `DESIGN.md` lists every token,
 and the Swift SDK takes the same tokens by the same names.
 
+## Where bundles go
+
+This SDK POSTs to an endpoint you run. **It cannot deliver into Linear directly, and
+that is Linear's doing rather than a gap here:** Linear's Content Security Policy
+blocks the signed upload `PUT` from browser JavaScript, so a page can create the issue
+but cannot attach the screenshots - and an issue without the picture is most of the
+value gone.
+
+So the web shape is: page → your intake endpoint → wherever you want it. Your service
+files into Linear server-side, where no CSP applies. The Apple SDKs can talk to Linear
+directly, which is why `LoupeLinear` exists there and not here.
+
+**If you just want somewhere for bundles to land right now**, this package ships a
+receiver so that is one command rather than a snippet you have to wire in first:
+
+```sh
+npx loupe-intake                  # http://127.0.0.1:7423/loupe/intake
+npx loupe-intake --host 0.0.0.0   # so an iPad on the same network can reach it
+```
+
+It writes `.loupe/<sessionID>/bundle.json` with the screenshots beside it as PNGs -
+the same shape the Swift SDK writes on disk, so anything that reads one reads the
+other. Add `.loupe/` to `.gitignore`.
+
+It is deliberately not a framework: no auth, no queue, no delivery. It refuses to
+start with `NODE_ENV=production`, and it says so on the console when you point it at
+`0.0.0.0`, because it has no authentication at all. For anything beyond reading
+bundles on your own machine, put your own service in front. `docs/agent-install.md`
+has a handler for Next.js and Express if you would rather mount it in the app you
+already run.
+
 ## What it captures
 
 - **The element you pointed at**, climbed to the one you *meant*. `elementFromPoint`

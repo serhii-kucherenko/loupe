@@ -74,6 +74,32 @@ final class DrawerPullTests: XCTestCase {
                       "one tap out, the same as the one tap in")
     }
 
+    /// `CommentPopover` promises "the field is focused the moment it opens", and
+    /// nothing checked it. On an iPad that promise is the keyboard: without it, a
+    /// person picks a thing, gets a box, and has to tap again before they can say
+    /// anything - which is a second tap in the middle of the one flow this tool has.
+    ///
+    /// Typed without tapping the field first, deliberately. A `tap()` would give the
+    /// field focus and the test would pass whether or not the app ever did.
+    func testThePickedElementsCommentFieldIsReadyToTypeInto() {
+        launch(scene: "zero")
+        XCTAssertTrue(pull(notes: 0).waitForExistence(timeout: 5))
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)).tap()
+
+        XCTAssertTrue(app.textFields["What is wrong with this?"]
+            .waitForExistence(timeout: 3))
+        let save = app.buttons["Save"]
+        XCTAssertFalse(save.isEnabled, "nothing typed yet, so this cannot pass by luck")
+
+        // `app.typeText`, not `field.typeText`: the second one re-resolves the element
+        // and gives it focus on the way, which would make this pass whether or not the
+        // app ever focused anything. This types at whatever already has the keyboard.
+        app.typeText("straight in")
+
+        XCTAssertTrue(save.isEnabled, "the popover has to open ready to type into")
+    }
+
     /// Send is the other half of it, and it appears with the first note rather than
     /// sitting disabled from the start: a Send with nothing to send is a promise that
     /// fails, and this pull is too small to carry a dead control.

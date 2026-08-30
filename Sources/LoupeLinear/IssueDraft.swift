@@ -78,6 +78,10 @@ public extension IssueDraft {
         // Somebody chose this on the iPad. If the workspace has no label of that
         // name, the choice still has to arrive - as a sentence, since it could not
         // arrive as a label. Dropping it would be the quietest kind of lie.
+        if let note = windowNote(annotation: annotation, bundle: bundle) {
+            out += [note, ""]
+        }
+
         if let tag = annotation.tag, !matchedALabel {
             out += ["Tagged **\(tag.rawValue)** - this workspace has no label of "
                     + "that name, so none was set.", ""]
@@ -150,13 +154,63 @@ public extension IssueDraft {
         let app = bundle.app
         var rows = ["| | |", "|---|---|"]
         rows.append("| app | \(app.name)\(app.version.map { " \($0)" } ?? "") |")
-        rows.append("| platform | \(app.platform) |")
+        rows.append("| platform | \(platform(app)) |")
         rows.append("| environment | \(app.environment) |")
+        if let device = app.device {
+            if let machine = describe(device) { rows.append("| device | \(machine) |") }
+            if let screen = device.screen {
+                rows.append("| screen | \(size(screen)) |")
+            }
+        }
         // The single most useful field: it is how an agent checks out the code that
         // produced the screenshot.
         if let sha = app.commitSHA { rows.append("| commit | `\(sha)` |") }
         rows.append("| captured | \(ISO8601DateFormatter().string(from: annotation.capturedAt)) |")
         return rows
+    }
+
+    /// `iPadOS 26.5`. Joined here rather than stored joined, so the point release and
+    /// the platform name stay one value each and cannot come to disagree.
+    private static func platform(_ app: AppInfo) -> String {
+        guard let version = app.device?.osVersion else { return app.platform }
+        return "\(app.platform) \(version)"
+    }
+
+    /// `iPad Pro 11-inch (iPad8,3)`, or just the identifier for a model Loupe has not
+    /// been taught. Never the name alone: the identifier is the precise one.
+    private static func describe(_ device: DeviceInfo) -> String? {
+        switch (device.name, device.identifier) {
+        case let (name?, identifier?): return "\(name) (`\(identifier)`)"
+        case let (nil, identifier?): return "`\(identifier)`"
+        case let (name?, nil): return name
+        case (nil, nil): return nil
+        }
+    }
+
+    private static func size(_ screen: DeviceInfo.Screen) -> String {
+        let scale = screen.scale == screen.scale.rounded()
+            ? String(Int(screen.scale)) : String(format: "%.1f", screen.scale)
+        return "\(Int(screen.width))\u{00d7}\(Int(screen.height)) @\(scale)x"
+    }
+
+    /// The line that earns the whole device field.
+    ///
+    /// A window smaller than the screen means Split View or Slide Over, and a
+    /// screenshot cropped to the app cannot show it - so the cause of a whole class of
+    /// "it looks wrong" arrives invisible. Two numbers disagreeing in a table is not
+    /// something a reader notices. A sentence is.
+    static func windowNote(annotation: Annotation, bundle: AnnotationBundle) -> String? {
+        guard let device = bundle.app.device,
+              device.isPartOfTheScreen(viewport: annotation.viewport) == true,
+              let screen = device.screen, let viewport = annotation.viewport
+        else { return nil }
+
+        let sharing = viewport.width < screen.width - 1 ? "Split View or Slide Over"
+                                                        : "a window shorter than the screen"
+        return "**The app was not using the whole screen** - \(sharing), "
+            + "\(Int(viewport.width))\u{00d7}\(Int(viewport.height))pt of "
+            + "\(Int(screen.width))\u{00d7}\(Int(screen.height))pt. "
+            + "A screenshot cropped to the app cannot show that."
     }
 
     private static func rect(_ r: Rect) -> String {

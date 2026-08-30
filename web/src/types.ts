@@ -90,6 +90,31 @@ export interface AppInfo {
   /** `web` or `electron` from this SDK. */
   platform: string;
   environment?: string;
+  /** Which screen this was captured on. Filled in by `start`. */
+  device?: DeviceInfo;
+}
+
+/**
+ * The machine a note was taken on, as far as a layout bug needs.
+ *
+ * **Nothing identifying, ever.** No user agent string, no locale, no timezone, no
+ * anything a fingerprinter would want. A bundle gets pasted into tickets and public
+ * repositories; the moment it carries something a person would not want there, it
+ * stops being safe to share, and that costs far more than any field here is worth.
+ *
+ * The browser has no non-identifying way to say which machine it is on, so
+ * `identifier`, `name` and `osVersion` are Apple-only and simply absent here. Parsing
+ * a user agent for them would be guessing *and* fingerprinting at the same time.
+ */
+export interface DeviceInfo {
+  /** Apple platforms only, e.g. `iPad8,3`. */
+  identifier?: string;
+  /** Apple platforms only, e.g. `iPad Pro 11-inch`. */
+  name?: string;
+  /** Apple platforms only. The platform's own name is already on `AppInfo`. */
+  osVersion?: string;
+  /** The whole screen. `viewport` is the window, which is usually smaller. */
+  screen?: { width: number; height: number; scale: number };
 }
 
 export interface AnnotationBundle {

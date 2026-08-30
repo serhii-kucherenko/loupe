@@ -29,6 +29,14 @@ jobs:
       - name: Test
         run: swift test -v
 
+      # The first thing a new adopter runs, and prose cannot be compiled. A wrong
+      # install page is the most expensive kind of wrong: read once, by somebody with
+      # no way to tell whether the mistake is theirs. It caught one the day it was
+      # written - the theme example had its arguments in an order that does not
+      # compile.
+      - name: The install guide still compiles
+        run: bash scripts/check-install-guide.sh
+
   ios:
     name: Build and test (iOS)
     runs-on: macos-14
@@ -165,7 +173,7 @@ jobs:
 
   # Nothing to build, so they answer in seconds and on a Linux runner.
   lint:
-    name: Nothing quiet, nothing hardcoded
+    name: Nothing quiet, hardcoded, or personal
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -181,6 +189,11 @@ jobs:
       # visitor again in exactly one control - which reads as a bug rather than
       # as a theme, and only shows up inside the host nobody testing Loupe runs.
       - run: python3 scripts/check-theme-literals.py
+      # A bundle is written to be pasted - into a ticket, a pull request, a public
+      # repository. Loupe says which model and which OS; it never says whose device
+      # it was. Every API this catches is one autocomplete away from one Loupe
+      # legitimately uses, and produces a bundle that looks completely normal.
+      - run: python3 scripts/check-nothing-identifying.py
 
   web:
     name: Build and test (web)

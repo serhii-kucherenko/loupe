@@ -1,4 +1,4 @@
-import type { AppInfo } from "./types.js";
+import type { AppInfo, DeviceInfo } from "./types.js";
 import { AnnotationSession } from "./session.js";
 import { HTTPTransport, QueuedTransport, type Transport } from "./transport.js";
 import { LogRecorder, NetworkRecorder } from "./recorder.js";
@@ -50,6 +50,26 @@ export interface StartOptions {
  * app decided to print, and quietly shipping all of it to an intake endpoint is not
  * a decision an SDK gets to make on its host's behalf.
  */
+/**
+ * The screen, and deliberately nothing else.
+ *
+ * No user agent, no locale, no timezone. `screen.width`/`height` are CSS pixels of
+ * the whole display; `devicePixelRatio` is the rest. Which machine it is stays
+ * unknown here on purpose - the only ways to find out are guessing or fingerprinting,
+ * and both are worse than a blank field.
+ */
+function currentDevice(view: Window & typeof globalThis): DeviceInfo | undefined {
+  const screen = view.screen;
+  if (!screen || typeof screen.width !== "number") return undefined;
+  return {
+    screen: {
+      width: screen.width,
+      height: screen.height,
+      scale: view.devicePixelRatio ?? 1,
+    },
+  };
+}
+
 export function start(options: StartOptions): Loupe {
   const view = options.window ?? (globalThis as unknown as Window & typeof globalThis);
 
@@ -63,7 +83,14 @@ export function start(options: StartOptions): Loupe {
     ?? new HTTPTransport(options.endpoint ?? "/loupe/intake", options.headers);
   const queue = storage ? new QueuedTransport(base, storage) : undefined;
 
-  const session = new AnnotationSession(options.app, queue ?? base, storage);
+  // Asked of the browser rather than of the host. A layout bug needs the screen, and
+  // a host that had to fill it in would fill it in once, from whatever machine the
+  // developer was on that day.
+  const app: AppInfo = options.app.device
+    ? options.app
+    : { ...options.app, device: currentDevice(view) };
+
+  const session = new AnnotationSession(app, queue ?? base, storage);
 
   const overlayOptions: OverlayOptions = {
     network, logs,

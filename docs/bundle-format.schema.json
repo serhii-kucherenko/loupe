@@ -68,6 +68,9 @@
         "environment": {
           "type": "string",
           "default": "staging"
+        },
+        "device": {
+          "$ref": "#/$defs/deviceInfo"
         }
       }
     },
@@ -254,6 +257,60 @@
           "type": "string",
           "contentEncoding": "base64",
           "description": "The whole window with the element outlined. Only over HTTP; on disk it sits beside the JSON as <id>-context.png. Apple platforms only - the web SDK has no way to take one."
+        }
+      }
+    },
+    "deviceInfo": {
+      "type": "object",
+      "description": "The machine the note was taken on, as far as a layout bug needs. Nothing identifying is ever written here: no device name a person chose, no vendor or advertising identifier, no user agent, no locale. A bundle gets pasted into tickets and public repositories.",
+      "additionalProperties": true,
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "description": "Model identifier. Apple platforms only.",
+          "examples": [
+            "iPad8,3",
+            "Mac15,3"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "description": "Marketing name, from an exact-match table. Absent means Loupe has not been taught this model, never that the model is unknown - read `identifier` for that.",
+          "examples": [
+            "iPad Pro 11-inch"
+          ]
+        },
+        "osVersion": {
+          "type": "string",
+          "description": "The point release only. The platform's own name is on `app.platform`.",
+          "examples": [
+            "26.5",
+            "26.5.1"
+          ]
+        },
+        "screen": {
+          "type": "object",
+          "description": "The whole screen in points. `annotation.viewport` is the window, which is often smaller - when it is, the app was in Split View, Slide Over, or a resized window.",
+          "required": [
+            "width",
+            "height",
+            "scale"
+          ],
+          "properties": {
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            },
+            "scale": {
+              "type": "number",
+              "examples": [
+                2,
+                3
+              ]
+            }
+          }
         }
       }
     }

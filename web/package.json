@@ -24,6 +24,7 @@
   },
   "files": [
     "dist/src",
+    "intake.mjs",
     "README.md"
   ],
   "sideEffects": false,
@@ -51,5 +52,8 @@
     "ai-agent",
     "feedback",
     "screenshot"
-  ]
+  ],
+  "bin": {
+    "loupe-intake": "./intake.mjs"
+  }
 }
