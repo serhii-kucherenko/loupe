@@ -100,14 +100,20 @@ Both came out of [SER-601](https://linear.app/serhii-kucherenko/issue/SER-601).
 Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.2")
+.package(url: "https://github.com/serhii-kucherenko/loupe", from: "0.1.3")
 ```
 
 Pre-1.0 on purpose: the bundle format is settled, but the SDK API is young, so the shape
-may still move. Take 0.1.2 or later. It is the first version that can send into Linear, and
-the first where the picker is trustworthy on iOS: earlier ones could not reliably take a tap
-on their own controls, and could hand you a whole shelf of the screen when you pointed at one
-row inside it.
+may still move. **Take 0.1.3 or later.** Before it, annotating inside a presented screen -
+a sheet, a full-screen cover, a reader - photographed the screen *underneath* it, which is
+worse than no picture because nothing about it says it is wrong. 0.1.3 is also the first
+version where the overlay can wear your design system, and where the tag you pick becomes a
+real Linear label.
+
+One source-breaking change in 0.1.3, and it only touches a host driving Loupe directly
+rather than through the overlay: `Loupe.capture(at:in:comment:)` is `async` now. A
+`WKWebView` renders out of process and the only way to get its real pixels is to ask WebKit
+and wait. Add `await`.
 
 **If SwiftPM refuses to resolve Loupe at all**, with a fingerprint or "not signed with the
 same identity" error, delete `~/Library/org.swift.swiftpm/security/fingerprints/loupe-*.json`
