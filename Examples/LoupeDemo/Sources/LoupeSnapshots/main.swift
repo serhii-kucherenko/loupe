@@ -176,6 +176,14 @@ enum Scene: String, CaseIterable {
             model.hover(row)
         case .comment:
             model.pick(row, screen: "/search")
+            // Typed, not empty. An offscreen window is never key, so no focus ring
+            // ever draws here - which left the picture showing a comment box that
+            // looks inactive, beside a Save that looks broken, while the product
+            // opens focused with the keyboard up. Seeding the draft removes the
+            // dependence on focus entirely and shows the thing that matters: a note
+            // being written, a tag chosen, Save live.
+            model.draftComment = "clearing the search leaves the old results on screen"
+            model.draftTag = .bug
         case .tray, .hosted:
             model.pick(row, screenshotPNG: crop(row.bounds), screen: "/search")
             model.saveComment("clearing the search leaves the old results on screen", tag: .bug)

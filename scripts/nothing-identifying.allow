@@ -1,0 +1,12 @@
+# Argued-for cases for scripts/check-nothing-identifying.py.
+#
+# Format, tab-separated: <path>	<the source line>	<why this one is fine>
+#
+# Keyed by the source line rather than by line number, so moving code does not
+# silently re-allow something and editing the line does not either.
+#
+# The bar: the API may be used to decide *where Loupe writes on this machine*.
+# It may never be used to decide *what goes into a bundle*. A bundle is pasted
+# into tickets and public repositories; a path on somebody's disk is not.
+
+Sources/LoupeCore/Transport.swift	return URL(fileURLWithPath: NSHomeDirectory())	Chooses where to write bundles on this machine - ~/.loupe/<app>. The path never enters a bundle, and Catalyst has no homeDirectoryForCurrentUser.

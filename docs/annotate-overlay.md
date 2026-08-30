@@ -1,8 +1,8 @@
 # The annotate overlay - design and build order
 
-The ordered task list lives in the [Linear project](https://linear.app/serhii-kucherenko/project/loupe-8fd34fb80084).
-This file is the *how*: the decisions behind the overlay, the file map, and the phase order.
-It is not a task list. See `AGENTS.md`.
+Open work lives in [GitHub issues](https://github.com/serhii-kucherenko/loupe/issues).
+This file is the *how*: the decisions behind the overlay, the file map, and the phase
+order. It is not a task list. See `AGENTS.md`.
 
 ## Where the product stands
 

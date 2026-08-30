@@ -41,7 +41,7 @@ struct AgentInbox: View {
             List(bundles, selection: $selected) { bundle in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(bundle.value.sentAt.formatted(date: .abbreviated, time: .shortened))
-                    Text("\(bundle.value.annotations.count) notes · \(bundle.value.app.platform)"
+                    Text("\(bundle.value.annotations.count) notes · \(platform(bundle.value.app))"
                          + (bundle.value.app.commitSHA.map { " · \($0)" } ?? ""))
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
@@ -51,6 +51,15 @@ struct AgentInbox: View {
         }
         .padding(16)
         .columnWidth(280)
+    }
+
+    /// `iPadOS 26.5 · iPad Pro 11-inch`. The agent side is where the device field
+    /// earns its place: this is the person deciding whether they can reproduce it.
+    private func platform(_ app: AppInfo) -> String {
+        var parts = [app.platform]
+        if let version = app.device?.osVersion { parts[0] += " \(version)" }
+        if let name = app.device?.name ?? app.device?.identifier { parts.append(name) }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder

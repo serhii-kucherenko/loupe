@@ -7,7 +7,17 @@
     "version": "1.4.0",
     "commitSHA": "9f2c1ab",
     "platform": "iPadOS",
-    "environment": "staging"
+    "environment": "staging",
+    "device": {
+      "identifier": "iPad8,3",
+      "name": "iPad Pro 11-inch",
+      "osVersion": "26.5",
+      "screen": {
+        "width": 1194,
+        "height": 834,
+        "scale": 2
+      }
+    }
   },
   "annotations": [
     {

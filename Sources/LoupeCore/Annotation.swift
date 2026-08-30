@@ -200,16 +200,22 @@ public struct AppInfo: Codable, Sendable, Equatable {
     public var commitSHA: String?
     public var platform: String
     public var environment: String
+    /// Which machine, which screen, which point release. Filled in by `Loupe.start`
+    /// when a host leaves it nil, so nobody has to remember it and nobody can get it
+    /// wrong. See `DeviceInfo` for what is deliberately *not* in it.
+    public var device: DeviceInfo?
 
     public init(
         name: String,
         version: String? = nil,
         commitSHA: String? = nil,
         platform: String,
-        environment: String = "staging"
+        environment: String = "staging",
+        device: DeviceInfo? = nil
     ) {
         self.name = name; self.version = version; self.commitSHA = commitSHA
         self.platform = platform; self.environment = environment
+        self.device = device
     }
 
     public init(from decoder: Decoder) throws {
@@ -219,5 +225,6 @@ public struct AppInfo: Codable, Sendable, Equatable {
         commitSHA = try c.decodeIfPresent(String.self, forKey: .commitSHA)
         platform = try c.decode(String.self, forKey: .platform)
         environment = try c.decodeIfPresent(String.self, forKey: .environment) ?? "staging"
+        device = try c.decodeIfPresent(DeviceInfo.self, forKey: .device)
     }
 }

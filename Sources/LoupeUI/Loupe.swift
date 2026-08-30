@@ -35,6 +35,12 @@ public enum Loupe {
         LoupeTheme.appearance = theme
         NetworkRecorder.install()
 
+        // Asked here rather than of the host. A layout bug needs the device and the
+        // screen, and a host that had to fill those in would fill them in once, from
+        // whatever machine the developer was on that day.
+        var app = app
+        if app.device == nil { app.device = DeviceInfo.current() }
+
         let directory = FileTransport.defaultDirectory(appName: app.name)
         let resolved = transport ?? FileTransport(directory: directory)
         let session = AnnotationSession(
