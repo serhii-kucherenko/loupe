@@ -33,6 +33,22 @@ final class LinearSettingsTests: XCTestCase {
         XCTAssertEqual(settings.credential(), .accessToken("oauth-token"))
     }
 
+    /// A key saved before the panel stopped offering the field still works.
+    ///
+    /// The panel no longer renders a personal-key field on a host that has an OAuth
+    /// application, but the stored credential is untouched by that: `load()` reads a
+    /// `lin_api_` prefix back as `.apiKey` and always did. If this ever fails,
+    /// dropping the field signed somebody out - which is not what it was for.
+    func testAKeySavedBeforeTheFieldWasRemovedStillLoads() throws {
+        // A destination too, because a transport needs both. Without it this fails
+        // on "No team chosen yet", which says nothing about the credential.
+        settings.destination = LinearDestination(teamID: "TEAM", projectID: "PROJ")
+        try skipIfKeychainRefuses { try settings.save(.apiKey("lin_api_from_before")) }
+
+        XCTAssertEqual(settings.credential(), .apiKey("lin_api_from_before"))
+        XCTAssertNoThrow(try settings.transport())
+    }
+
     func testThereIsNoCredentialUntilOneIsSaved() {
         // Best effort: this is setup, not the assertion. A Keychain with no
         // entitlement refuses the delete outright - `errSecMissingEntitlement`, not

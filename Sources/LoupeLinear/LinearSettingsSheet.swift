@@ -18,6 +18,11 @@ public struct LinearSettingsSheet: View {
     /// Present when the host has registered an OAuth application. Absent is normal:
     /// the API key path needs no setup at all, and asking someone to register an app
     /// before they can try the tool is a worse first five minutes.
+    ///
+    /// It also decides which way in the panel offers. Present means Sign in and only
+    /// Sign in; absent means the key field and only the key field. A key already in
+    /// the Keychain keeps working either way - `LinearSettings.load()` still reads a
+    /// `lin_api_` prefix back as `.apiKey`, so nobody is signed out by this.
     private let oauth: LinearOAuth?
     private let settings: LinearSettings
 
@@ -54,19 +59,26 @@ public struct LinearSettingsSheet: View {
             } else if isSignedIn {
                 signedIn
             } else {
+                // One way in, or the other. Never both.
+                //
+                // A host with an OAuth application gets Sign in and nothing else.
+                // A pasted personal key is the same capability with worse
+                // properties - it carries the whole of someone's account, has no
+                // scope, never expires, and gets typed in over a shoulder on an
+                // iPad. Offering it beside a working OAuth button is offering the
+                // worse option to someone who does not have to take it.
+                //
+                // A host with no OAuth application still gets the field. Loupe has
+                // other adopters, OAuth needs an application registered before
+                // anyone can try the tool at all, and "register an app first" is a
+                // bad first five minutes.
                 if let oauth {
-                    // Full width, because it is the recommended path and a button
-                    // that hugs its label reads as one option among several rather
-                    // than as the one to take.
+                    // Full width, because it is the only way in.
                     signIn(with: oauth)
                         .frame(maxWidth: .infinity)
-                    Text("or paste a key")
-                        .font(LoupeTheme.Typography.note)
-                        .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    credentialField
                 }
-
-                credentialField
             }
 
             if !flow.isRestoring {
@@ -226,8 +238,12 @@ public struct LinearSettingsSheet: View {
         switch flow.connection {
         case .idle:
             // Save needs a team, and a team needs a credential. Without this the
-            // panel showed a disabled Save and nothing at all saying why.
-            Text("Sign in or paste a key to choose where notes go.")
+            // panel showed a disabled Save and nothing at all saying why. It names
+            // only the way in this host actually has - telling someone to paste a
+            // key beside no key field is worse than saying nothing.
+            Text(oauth == nil
+                 ? "Paste a key to choose where notes go."
+                 : "Sign in to choose where notes go.")
                 .font(LoupeTheme.Typography.note)
                 .foregroundStyle(LoupeTheme.Colors.inkSoft.color)
                 .fixedSize(horizontal: false, vertical: true)
@@ -263,20 +279,25 @@ public struct LinearSettingsSheet: View {
             // Bordered, not quiet: a quiet button has no outline until it is hovered,
             // and there is no hover on a touch screen - so on the device this read as
             // a label rather than something to press.
-            Button(isSignedIn ? "Refresh" : "Test connection") {
-                Task {
-                    if isSignedIn {
-                        await flow.refresh()
-                    } else {
-                        await flow.test(key: key)
+            // Hidden while signed out on an OAuth host, because there is nothing
+            // left to test: the sign-in is the test, and a button that can never
+            // become enabled is furniture.
+            if isSignedIn || oauth == nil {
+                Button(isSignedIn ? "Refresh" : "Test connection") {
+                    Task {
+                        if isSignedIn {
+                            await flow.refresh()
+                        } else {
+                            await flow.test(key: key)
+                        }
                     }
                 }
+                .buttonStyle(LoupeButtonStyle(kind: .secondary))
+                .disabled(flow.connection == .testing || (!isSignedIn && key.isEmpty))
+                .accessibilityLabel(isSignedIn
+                                    ? "Refresh teams and projects from Linear"
+                                    : "Test the connection to Linear")
             }
-            .buttonStyle(LoupeButtonStyle(kind: .secondary))
-            .disabled(flow.connection == .testing || (!isSignedIn && key.isEmpty))
-            .accessibilityLabel(isSignedIn
-                                ? "Refresh teams and projects from Linear"
-                                : "Test the connection to Linear")
             Spacer()
             Button("Save") {
                 // Only on a write that actually took. A panel that closes on a refused

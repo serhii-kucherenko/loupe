@@ -34,7 +34,9 @@ LoupeLinear.enable()
 ```
 
 Two lines, and a settings panel appears behind the drawer's gear where someone can
-paste a personal API key or sign in with Linear. The credential goes to the Keychain.
+paste a personal API key. Pass an `oauth` application (below) and the panel offers
+**Sign in with Linear** instead - one way in, not both. The credential goes to the
+Keychain.
 The workspace is shown, because a credential belongs to exactly one; team and project
 are pickers, because nobody types a UUID on an iPad.
 
@@ -85,7 +87,19 @@ LoupeLinear.enable(oauth: LinearOAuth(clientID: "…", redirectURI: "yourapp://l
 ```
 
 A client id is public - PKCE is what removes the need for a secret, so none ships in
-your binary. Leave `oauth` out and the panel offers the API key field alone.
+your binary.
+
+**The two ways in are exclusive.** With `oauth`, the panel shows Sign in and no key
+field. Without it, the key field and no Sign in. A pasted key is the same capability
+with worse properties - it carries the whole of someone's account, has no scope, never
+expires, and gets typed in over a shoulder on an iPad - so offering it beside a
+working Sign in button only offers the worse option to somebody who need not take it.
+Leaving `oauth` out is still supported and still normal: OAuth needs an application
+registered before anyone can try Loupe at all.
+
+A key already in the Keychain keeps working when a host adds `oauth`. `LinearSettings`
+reads a `lin_api_` prefix back as a personal key regardless of what the panel draws,
+so adding Sign in signs nobody out.
 
 **`LoupeLinear` is Apple-only, and that is Linear's doing rather than a gap here.**
 Linear's Content Security Policy blocks the signed upload `PUT` from browser
